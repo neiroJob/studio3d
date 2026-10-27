@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "accounts",
     "core",
+    "printers",
 ]
 
 MIDDLEWARE = [
@@ -136,6 +137,11 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 BACKUP_DIR = Path(env("BACKUP_DIR", BASE_DIR / "backups"))
+
+# Как часто обновлять превью камер на дашборде и в карточке, сек
+CAMERA_REFRESH_SECONDS = env_int("CAMERA_REFRESH_SECONDS", 10)
+# Загрузка G-code: файлы до 2 ГБ, в памяти не держим
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True

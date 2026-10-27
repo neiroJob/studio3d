@@ -1,0 +1,69 @@
+{% extends "base.html" %}{% load printers_tags %}
+{% block title %}{{ printer.name }}{% endblock %}
+{% block heading %}{{ printer.name }}{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px"><a href="{% url 'dashboard' %}" class="small muted">← Дашборд</a><span class="spacer"></span>
+  <span class="small muted">{{ profile.title|default:printer.profile_id }} · {{ printer.host }}:{{ printer.port }} · драйвер {{ profile.driver }}{% if web_ui %} · <a href="{{ web_ui }}" target="_blank" rel="noopener">веб-интерфейс принтера</a>{% endif %}</span></div>
+<div class="tabs">
+  <a href="?tab=now" class="{% if tab == 'now' %}on{% endif %}">Сейчас</a>
+  {% if can_control %}<a href="?tab=files" class="{% if tab == 'files' %}on{% endif %}">Файлы</a>{% endif %}
+  <a href="?tab=history" class="{% if tab == 'history' %}on{% endif %}">История</a>
+  <a href="?tab=hours" class="{% if tab == 'hours' %}on{% endif %}">Наработка</a>
+  {% if "printers_manage" in rights %}<a href="{% url 'printer_edit' printer.pk %}">Настройки</a>{% endif %}
+</div>
+
+{% if tab == "now" %}
+<div class="g32">
+  <div class="stack">
+    <div class="cam">{% if profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
+  </div>
+  <div class="stack" hx-get="{% url 'printer_live' printer.pk %}" hx-trigger="every 3s" hx-swap="innerHTML">
+    {% include "printers/_live.html" %}
+  </div>
+</div>
+
+{% elif tab == "files" %}
+<div class="stack">
+  <form class="panel" method="post" enctype="multipart/form-data" action="{% url 'printer_upload' printer.pk %}">
+    {% csrf_token %}<h2>Загрузить G-code на принтер</h2>
+    <div class="row">
+      <input type="file" name="file" accept=".gcode,.gco,.g" required>
+      <label class="check"><input type="checkbox" name="start"> Сразу запустить печать</label>
+      <span class="spacer"></span><button class="btn pri" type="submit">Загрузить</button>
+    </div>
+    <p class="hint" style="margin:8px 0 0">Файл уходит в папку gcodes принтера. Перед запуском проверьте, что стол пуст.</p>
+  </form>
+  <div class="panel">
+    <h2>Файлы на принтере</h2>
+    {% if files_error %}<div class="msg error">{{ files_error }}</div>{% else %}
+    {% if state.status != "ready" %}<div class="note">Запуск доступен, когда принтер в статусе «Готов». Сейчас: {{ state.label|lower }}.</div>{% endif %}
+    <div class="tbl-wrap"><table>
+      <tr><th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
+      {% for f in files %}<tr><td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
+        <td class="num">{% if state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="4" class="muted">Файлов нет</td></tr>{% endfor %}
+    </table></div>{% endif %}
+  </div>
+</div>
+
+{% elif tab == "history" %}
+<div class="panel tbl-wrap"><table>
+  <tr><th>Начало</th><th>Файл</th><th class="num">Время печати</th><th class="num">Пластик</th><th>Результат</th></tr>
+  {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.filename }}</td><td class="num">{{ j.print_duration|duration }}</td>
+    <td class="num">{% if j.filament_g %}{{ j.filament_g|floatformat:0 }} г{% else %}{{ j.filament_mm|floatformat:0 }} мм{% endif %}</td>
+    <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span></td></tr>
+  {% empty %}<tr><td colspan="5" class="muted">Заданий с момента подключения пока нет.</td></tr>{% endfor %}
+</table></div>
+
+{% elif tab == "hours" %}
+<div class="grid2"><div class="panel"><h2>Наработка</h2>
+  <dl class="kv">
+    <dt>Часы печати</dt><dd><b>{{ printer.print_seconds|hours }} ч</b></dd>
+    <dt>— до подключения</dt><dd>{{ printer.print_seconds_base|hours }} ч (из истории принтера)</dd>
+    <dt>— в системе</dt><dd>{{ jobs_count }} заданий</dd>
+    <dt>Часы включения</dt><dd><b>{{ printer.on_seconds|hours }} ч</b> <span class="muted small">с {{ printer.created_at|date:"d.m.Y" }}</span></dd>
+  </dl>
+  <p class="hint" style="margin:10px 0 0">Часы печати — сумма заданий. Часы включения — время, когда принтер отвечал. Счётчики не сбрасываются. Регламенты ТО — на этапе 8.</p>
+</div></div>
+{% endif %}
+{% endblock %}

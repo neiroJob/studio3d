@@ -1,0 +1,27 @@
+# Профиль модели. Справочник полей — web/printers/profiles.py.
+# Проверено на реальном принтере 2026-10-27 (только чтение): порт 7125, Fluidd 10088, камера MJPEG 8080.
+id: qidi_q1_pro
+manufacturer: QIDI
+model: Q1 Pro
+driver: moonraker
+verified: true
+
+connection:
+  port: 7125
+  web_ui: "http://{host}:10088"
+
+# Паспортная мощность, Вт. Нет проверенных данных — пользователь вводит свою.
+power_w: null
+
+build_volume_mm: [245, 258, 248]
+
+# Объекты Klipper, которые у разных моделей называются по-разному.
+objects:
+  chamber: "heater_generic chamber"
+
+camera:
+  type: mjpeg_snapshot
+  # У QIDI камера не зарегистрирована в Moonraker (server/webcams/list пуст), адрес задаём здесь.
+  snapshot_url: "http://{host}:8080/?action=snapshot"
+
+capabilities: [pause, resume, cancel, start_file, upload]

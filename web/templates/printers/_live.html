@@ -1,0 +1,35 @@
+{% load printers_tags %}{% with s=state p=printer %}
+<div class="panel" style="--c:var({{ s.color }})">
+  <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
+  {% if s.message %}<div class="msg error" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
+  {% if s.job %}
+    <div class="bar" style="margin-bottom:12px"><i style="width:{{ s.job.percent }}%"></i></div>
+    <dl class="kv">
+      <dt>Файл</dt><dd>{{ s.job.filename }}</dd>
+      <dt>Прогресс</dt><dd>{{ s.job.percent }} %{% if s.job.layer %}, слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% elif s.job.total_layers %}, слоёв {{ s.job.total_layers }}{% endif %}</dd>
+      <dt>Прошло</dt><dd>{{ s.job.elapsed|duration }}</dd>
+      <dt>Осталось</dt><dd>{{ s.job.remaining|duration }}</dd>
+      <dt>Пластик</dt><dd>{% if s.job.filament_g_total %}≈ {{ s.job.filament_g_now }} из {{ s.job.filament_g_total|floatformat:0 }} г (по G-code){% else %}{{ s.job.filament_mm|floatformat:0 }} мм{% endif %}</dd>
+    </dl>
+  {% elif s.status == "finished" %}<p style="margin:0">Печать завершена. Снимите изделие со стола и отметьте это.</p>
+  {% elif s.status == "offline" %}<p class="muted" style="margin:0">{{ s.message|default:"Принтер не отвечает." }}{% if p.last_seen_at %} Последний ответ {{ p.last_seen_at|date:"d.m.Y H:i" }}.{% endif %}</p>
+  {% else %}<p class="muted" style="margin:0">Сейчас ничего не печатается.</p>{% endif %}
+  <div class="acts">
+    {% if can_control %}
+      {% if s.status == "printing" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'pause' %}">{% csrf_token %}<button class="btn">Пауза</button></form>{% endif %}
+      {% if s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'resume' %}">{% csrf_token %}<button class="btn">Продолжить</button></form>{% endif %}
+      {% if s.status == "printing" or s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'cancel' %}" onsubmit="return confirm('Отменить печать на {{ p.name|escapejs }}? Продолжить её будет нельзя.')">{% csrf_token %}<button class="btn warn">Отменить печать</button></form>{% endif %}
+      {% if s.status == "ready" %}<a class="btn pri" href="?tab=files">Поставить на печать</a>{% endif %}
+    {% endif %}
+    {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<button class="btn pri">Снял изделие</button></form>{% endif %}
+  </div>
+</div>
+<div class="panel"><h2>Температуры, °C</h2>
+  {% if s.temps.nozzle %}
+  <dl class="kv"><dt>Сопло</dt><dd>{{ s.temps.nozzle.0|floatformat:1 }} / {{ s.temps.nozzle.1|floatformat:0 }}</dd>
+    <dt>Стол</dt><dd>{{ s.temps.bed.0|floatformat:1 }} / {{ s.temps.bed.1|floatformat:0 }}</dd>
+    {% if s.temps.chamber %}<dt>Камера</dt><dd>{{ s.temps.chamber.0|floatformat:1 }} / {{ s.temps.chamber.1|floatformat:0 }}</dd>{% endif %}</dl>
+  <p class="hint" style="margin:8px 0 0">Текущая / целевая</p>
+  {% else %}<p class="muted" style="margin:0">Нет данных</p>{% endif %}
+</div>
+{% endwith %}

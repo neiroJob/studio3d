@@ -1,0 +1,120 @@
+{
+ "_source": "Синтетический пример по документации Moonraker и проверке Q1 Pro 2026-10-27 (версии, объекты). Состояние печати не записано с принтера — заменить записью, когда будет.",
+ "server_info": {
+  "klippy_connected": true,
+  "klippy_state": "ready",
+  "components": [
+   "history",
+   "file_manager",
+   "webcam"
+  ],
+  "moonraker_version": "v0.7.1-609-dirty",
+  "api_version": [
+   1,
+   0,
+   5
+  ]
+ },
+ "printer_info": {
+  "state": "ready",
+  "state_message": "Printer is ready",
+  "hostname": "mkspi",
+  "software_version": "v0.10.0-530-dirty",
+  "cpu_info": "4 core ?"
+ },
+ "status": {
+  "webhooks": {
+   "state": "ready",
+   "state_message": "Printer is ready"
+  },
+  "print_stats": {
+   "state": "printing",
+   "filename": "gear_z24.gcode",
+   "print_duration": 1800.0,
+   "total_duration": 1900.0,
+   "filament_used": 2500.5,
+   "message": "",
+   "info": {
+    "current_layer": 42,
+    "total_layer": 120
+   }
+  },
+  "virtual_sdcard": {
+   "progress": 0.35,
+   "is_active": true,
+   "file_position": 123456
+  },
+  "extruder": {
+   "temperature": 249.8,
+   "target": 250.0
+  },
+  "heater_bed": {
+   "temperature": 99.6,
+   "target": 100.0
+  },
+  "heater_generic chamber": {
+   "temperature": 45.2,
+   "target": 50.0
+  }
+ },
+ "metadata": {
+  "filename": "gear_z24.gcode",
+  "estimated_time": 5400,
+  "filament_weight_total": 42.7,
+  "filament_total": 14200.0,
+  "layer_count": 120,
+  "slicer": "OrcaSlicer"
+ },
+ "history_totals": {
+  "total_jobs": 57,
+  "total_time": 400000.0,
+  "total_print_time": 360000.0,
+  "total_filament_used": 1200000.0,
+  "longest_job": 30000.0,
+  "longest_print": 29000.0
+ },
+ "history": [
+  {
+   "job_id": "0000A1",
+   "filename": "old_part.gcode",
+   "status": "completed",
+   "start_time": 1000.0,
+   "end_time": 4600.0,
+   "print_duration": 3500.0,
+   "total_duration": 3600.0,
+   "filament_used": 5000.0,
+   "metadata": {
+    "filament_weight_total": 15.0,
+    "filament_total": 5000.0
+   }
+  },
+  {
+   "job_id": "0000A2",
+   "filename": "bracket.gcode",
+   "status": "cancelled",
+   "start_time": 1761500000.0,
+   "end_time": 1761503600.0,
+   "print_duration": 3000.0,
+   "total_duration": 3600.0,
+   "filament_used": 1000.0,
+   "metadata": {
+    "filament_weight_total": 20.0,
+    "filament_total": 4000.0
+   }
+  }
+ ],
+ "files": [
+  {
+   "path": "gear_z24.gcode",
+   "modified": 1761550000.0,
+   "size": 2345678,
+   "permissions": "rw"
+  },
+  {
+   "path": "cube.gcode",
+   "modified": 1761400000.0,
+   "size": 120000,
+   "permissions": "rw"
+  }
+ ]
+}

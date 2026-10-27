@@ -1,0 +1,396 @@
+"""Драйвер Moonraker (Klipper): QIDI Q1 Pro, Plus 4, Q2; Elegoo Neptune 4 Max; Creality K1C ревизии 2025.
+
+API: https://moonraker.readthedocs.io — HTTP для команд и файлов, WebSocket (JSON-RPC) для состояния.
+Особенности, найденные на реальных принтерах, — в памяти проекта (printers.md, lessonslearned № 7):
+имена объектов Klipper с пробелом в query-строке нужно URL-кодировать.
+"""
+
+import asyncio
+import itertools
+import json
+import time
+import urllib.parse
+
+import requests
+
+from . import base
+
+STATUS_FIELDS = {
+    "webhooks": ["state", "state_message"],
+    "print_stats": [
+        "state",
+        "filename",
+        "print_duration",
+        "total_duration",
+        "filament_used",
+        "message",
+        "info",
+    ],
+    "virtual_sdcard": ["progress", "is_active", "file_position"],
+    "extruder": ["temperature", "target"],
+    "heater_bed": ["temperature", "target"],
+}
+TEMP_FIELDS = ["temperature", "target"]
+
+
+def subscribe_objects(profile):
+    objects = dict(STATUS_FIELDS)
+    chamber = (profile.objects.get("chamber") if profile else None) or ""
+    if chamber:
+        objects[chamber] = TEMP_FIELDS
+    return objects
+
+
+def _pair(obj):
+    if not isinstance(obj, dict) or obj.get("temperature") is None:
+        return None
+    return [round(float(obj.get("temperature") or 0), 1), round(float(obj.get("target") or 0), 1)]
+
+
+def normalize(status, meta=None, profile=None, connected=True, now=None):
+    """Состояние Moonraker (слитые ответы subscribe/notify) → единая модель состояния."""
+    now = now or time.time()
+    if not connected:
+        return base.offline_state(updated=now)
+    meta = meta or {}
+    webhooks = status.get("webhooks") or {}
+    stats = status.get("print_stats") or {}
+    chamber_name = (profile.objects.get("chamber") if profile else None) or ""
+
+    temps = {
+        "nozzle": _pair(status.get("extruder")),
+        "bed": _pair(status.get("heater_bed")),
+        "chamber": _pair(status.get(chamber_name)) if chamber_name else None,
+    }
+
+    klippy = webhooks.get("state", "ready")
+    message = ""
+    if klippy in ("shutdown", "error"):
+        result = base.ERROR
+        message = webhooks.get("state_message") or "Klipper остановлен"
+    elif klippy == "startup":
+        return {**base.offline_state("Klipper запускается", now), "temps": temps}
+    else:
+        state = stats.get("state", "standby")
+        result = {
+            "printing": base.PRINTING,
+            "paused": base.PAUSED,
+            "error": base.ERROR,
+        }.get(state, base.READY)
+        if state == "error":
+            message = stats.get("message") or "Ошибка печати"
+
+    job = None
+    if result in (base.PRINTING, base.PAUSED) or (result == base.ERROR and stats.get("filename")):
+        progress = float((status.get("virtual_sdcard") or {}).get("progress") or 0)
+        elapsed = float(stats.get("print_duration") or 0)
+        info = stats.get("info") or {}
+        estimated = meta.get("estimated_time")
+        if estimated:
+            remaining = max(float(estimated) - elapsed, 0)
+        elif progress > 0.01:
+            remaining = elapsed / progress - elapsed
+        else:
+            remaining = None
+        job = {
+            "filename": stats.get("filename") or "",
+            "progress": round(progress, 4),
+            "layer": info.get("current_layer"),
+            "total_layers": info.get("total_layer") or meta.get("layer_count"),
+            "elapsed": round(elapsed),
+            "remaining": round(remaining) if remaining is not None else None,
+            "filament_mm": round(float(stats.get("filament_used") or 0), 1),
+            "filament_g_total": meta.get("filament_weight_total"),
+        }
+
+    return {"status": result, "message": message, "temps": temps, "job": job, "updated": now}
+
+
+def job_from_history(item):
+    """Запись server/history → поля PrintJob."""
+    meta = item.get("metadata") or {}
+    filament_mm = float(item.get("filament_used") or 0)
+    weight = meta.get("filament_weight_total")
+    total_mm = meta.get("filament_total")
+    grams = None
+    if weight:
+        if item.get("status") == "completed" or not total_mm:
+            grams = float(weight)
+        else:
+            grams = float(weight) * min(filament_mm / float(total_mm), 1.0)
+    return {
+        "external_id": str(item.get("job_id")),
+        "filename": item.get("filename") or "",
+        "status": item.get("status") or "other",
+        "start_time": float(item.get("start_time") or 0),
+        "end_time": float(item["end_time"]) if item.get("end_time") else None,
+        "print_duration": float(item.get("print_duration") or 0),
+        "total_duration": float(item.get("total_duration") or 0),
+        "filament_mm": filament_mm,
+        "filament_g": round(grams, 1) if grams is not None else None,
+    }
+
+
+class MoonrakerClient(base.BaseClient):
+    @property
+    def base_url(self):
+        return f"http://{self.host}:{self.port}"
+
+    def _headers(self):
+        return {"X-Api-Key": self.api_key} if self.api_key else {}
+
+    def _request(self, method, path, **kwargs):
+        timeout = kwargs.pop("timeout", self.timeout)
+        try:
+            resp = requests.request(
+                method, self.base_url + path, headers=self._headers(), timeout=timeout, **kwargs
+            )
+        except requests.Timeout as e:
+            raise base.DriverError("Принтер не ответил вовремя") from e
+        except requests.ConnectionError as e:
+            raise base.DriverError("Нет связи с принтером: проверьте IP, порт и что принтер включён") from e
+        if resp.status_code in (401, 403):
+            raise base.DriverError("Принтер требует авторизацию: укажите API-ключ")
+        try:
+            data = resp.json()
+        except ValueError as e:
+            raise base.DriverError(f"Неожиданный ответ принтера (HTTP {resp.status_code})") from e
+        if "error" in data:
+            err = data["error"]
+            text = err.get("message") if isinstance(err, dict) else str(err)
+            raise base.DriverError(f"Принтер вернул ошибку: {text}")
+        return data.get("result")
+
+    def get(self, path, **params):
+        query = "?" + urllib.parse.urlencode(params) if params else ""
+        return self._request("GET", path + query)
+
+    def post(self, path, **params):
+        query = "?" + urllib.parse.urlencode(params) if params else ""
+        return self._request("POST", path + query)
+
+    # --- проверка связи ---
+
+    def check(self):
+        started = time.monotonic()
+        server = self.get("/server/info")
+        latency_ms = round((time.monotonic() - started) * 1000)
+        result = {
+            "latency_ms": latency_ms,
+            "moonraker": server.get("moonraker_version", "?"),
+            "klippy_state": server.get("klippy_state", "?"),
+            "klipper": "",
+            "hostname": "",
+            "camera": "",
+            "camera_ok": False,
+            "printer_state": "",
+        }
+        try:
+            info = self.get("/printer/info")
+            result["klipper"] = info.get("software_version", "")
+            result["hostname"] = info.get("hostname", "")
+        except base.DriverError:
+            pass
+        if result["klippy_state"] == "ready":
+            try:
+                q = self.query({"print_stats": ["state"]})
+                result["printer_state"] = q.get("status", {}).get("print_stats", {}).get("state", "")
+            except base.DriverError:
+                pass
+        snap = self.profile.snapshot_url_for(self.host) if self.profile else ""
+        if snap:
+            result["camera"] = snap
+            result["camera_ok"] = fetch_snapshot(snap, timeout=4) is not None
+        return result
+
+    def query(self, objects):
+        # Имена вида «heater_generic chamber» обязательно кодируем (lessonslearned № 7).
+        parts = []
+        for name, fields in objects.items():
+            key = urllib.parse.quote(name)
+            parts.append(f"{key}={','.join(fields)}" if fields else key)
+        return self._request("GET", "/printer/objects/query?" + "&".join(parts))
+
+    def history_totals(self):
+        totals = (self.get("/server/history/totals") or {}).get("job_totals") or {}
+        return {"print_seconds": float(totals.get("total_print_time") or 0)}
+
+    # --- команды ---
+
+    def pause(self):
+        self.post("/printer/print/pause")
+
+    def resume(self):
+        self.post("/printer/print/resume")
+
+    def cancel(self):
+        self.post("/printer/print/cancel")
+
+    def start(self, filename):
+        self.post("/printer/print/start", filename=filename)
+
+    # --- файлы ---
+
+    def list_files(self):
+        items = self.get("/server/files/list", root="gcodes") or []
+        files = [
+            {
+                "path": f.get("path") or f.get("filename") or "",
+                "size": int(f.get("size") or 0),
+                "modified": float(f.get("modified") or 0),
+            }
+            for f in items
+        ]
+        return sorted(files, key=lambda f: f["modified"], reverse=True)
+
+    def file_metadata(self, filename):
+        return self.get("/server/files/metadata", filename=filename) or {}
+
+    def upload(self, fileobj, filename, start=False):
+        data = {"root": "gcodes"}
+        if start:
+            data["print"] = "true"
+        return self._request(
+            "POST", "/server/files/upload", files={"file": (filename, fileobj)}, data=data, timeout=300
+        )
+
+
+def fetch_snapshot(url, timeout=5):
+    """JPEG-снимок с камеры или None."""
+    try:
+        resp = requests.get(url, timeout=timeout)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200 or not resp.headers.get("Content-Type", "").startswith("image/"):
+        return None
+    return resp.content
+
+
+class MoonrakerMonitor(base.BaseMonitor):
+    """Постоянное соединение по WebSocket: подписка на состояние и события истории."""
+
+    def __init__(self, *args, session=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.session = session
+        self.status = {}
+        self.meta = {}
+        self._meta_for = None
+        self._ids = itertools.count(1)
+        self._pending = {}
+
+    @property
+    def http(self):
+        return f"http://{self.host}:{self.port}"
+
+    def _headers(self):
+        return {"X-Api-Key": self.api_key} if self.api_key else {}
+
+    async def _get(self, path, params=None):
+        async with self.session.get(
+            self.http + path, params=params, headers=self._headers(), timeout=10
+        ) as r:
+            data = await r.json(content_type=None)
+            if "error" in data:
+                raise base.DriverError(str(data["error"]))
+            return data.get("result")
+
+    async def history_since(self, since):
+        """Задания, завершённые после since (unix time), по порядку."""
+        jobs, start = [], 0
+        while True:
+            params = {"since": f"{since:.3f}", "order": "asc", "limit": "50", "start": str(start)}
+            result = await self._get("/server/history/list", params) or {}
+            page = result.get("jobs") or []
+            jobs.extend(j for j in page if j.get("end_time") and j.get("status") != "in_progress")
+            if len(page) < 50:
+                return jobs
+            start += 50
+
+    async def _call(self, ws, method, params=None):
+        msg_id = next(self._ids)
+        fut = asyncio.get_running_loop().create_future()
+        self._pending[msg_id] = fut
+        await ws.send_str(
+            json.dumps({"jsonrpc": "2.0", "method": method, "params": params or {}, "id": msg_id})
+        )
+        return await asyncio.wait_for(fut, timeout=10)
+
+    async def _refresh_meta(self):
+        filename = (self.status.get("print_stats") or {}).get("filename") or ""
+        if filename == self._meta_for:
+            return
+        self._meta_for = filename
+        self.meta = {}
+        if filename:
+            try:
+                self.meta = await self._get("/server/files/metadata", {"filename": filename}) or {}
+            except Exception:  # noqa: BLE001 — метаданных может не быть, это не ошибка связи
+                self.meta = {}
+
+    async def run(self, on_state, on_job, history_since=0.0):
+        import aiohttp
+
+        for item in await self.history_since(history_since):
+            await on_job(job_from_history(item), live=False)
+
+        ws_url = f"ws://{self.host}:{self.port}/websocket"
+        async with self.session.ws_connect(ws_url, headers=self._headers(), heartbeat=20) as ws:
+            reader = asyncio.create_task(self._reader(ws, on_state, on_job))
+            try:
+                await self._subscribe(ws, on_state)
+                await reader
+            finally:
+                reader.cancel()
+                for fut in self._pending.values():
+                    fut.cancel()
+                self._pending.clear()
+            if ws.exception():
+                raise ws.exception()
+        raise aiohttp.ClientConnectionError("Соединение закрыто принтером")
+
+    async def _subscribe(self, ws, on_state):
+        server = await self._call(ws, "server.info")
+        if server.get("klippy_state") != "ready":
+            self.status = {"webhooks": {"state": server.get("klippy_state", "startup"), "state_message": ""}}
+            await on_state(normalize(self.status, profile=self.profile))
+            return  # дождёмся notify_klippy_ready
+        result = await self._call(
+            ws, "printer.objects.subscribe", {"objects": subscribe_objects(self.profile)}
+        )
+        self.status = result.get("status", {})
+        await self._refresh_meta()
+        await on_state(normalize(self.status, self.meta, self.profile))
+
+    async def _reader(self, ws, on_state, on_job):
+        import aiohttp
+
+        async for msg in ws:
+            if msg.type != aiohttp.WSMsgType.TEXT:
+                if msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                    return
+                continue
+            data = json.loads(msg.data)
+            if "id" in data and data["id"] in self._pending:
+                fut = self._pending.pop(data["id"])
+                if "error" in data:
+                    fut.set_exception(base.DriverError(str(data["error"])))
+                else:
+                    fut.set_result(data.get("result") or {})
+                continue
+            method = data.get("method")
+            params = data.get("params") or []
+            if method == "notify_status_update" and params:
+                for name, diff in params[0].items():
+                    self.status.setdefault(name, {}).update(diff)
+                await self._refresh_meta()
+                await on_state(normalize(self.status, self.meta, self.profile))
+            elif method == "notify_klippy_ready":
+                asyncio.create_task(self._subscribe(ws, on_state))
+            elif method in ("notify_klippy_shutdown", "notify_klippy_disconnected"):
+                state = "shutdown" if method.endswith("shutdown") else "startup"
+                self.status.setdefault("webhooks", {})["state"] = state
+                await on_state(normalize(self.status, self.meta, self.profile))
+            elif method == "notify_history_changed" and params:
+                event = params[0]
+                if event.get("action") == "finished" and event.get("job"):
+                    await on_job(job_from_history(event["job"]), live=True)

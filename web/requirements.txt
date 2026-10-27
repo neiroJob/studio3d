@@ -2,3 +2,7 @@ Django>=5.2,<5.3
 psycopg[binary]>=3.2,<4
 django-redis>=5.4,<7
 gunicorn>=23,<24
+PyYAML>=6,<7
+requests>=2.32,<3
+aiohttp>=3.10,<4
+cryptography>=43

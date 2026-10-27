@@ -1,0 +1,32 @@
+{% load printers_tags %}{% with p=item.printer s=item.state %}
+<div class="tile{% if s.status == 'error' %} err{% endif %}" style="--c:var({{ s.color }})">
+  <a href="{% url 'printer_detail' p.pk %}" aria-label="{{ p.name }}">
+    {% if p.profile.snapshot_url %}<img class="thumb" id="cam-tile-{{ p.pk }}" hx-preserve="true" data-refresh src="{% url 'printer_snapshot' p.pk %}" alt="Камера {{ p.name }}" loading="lazy">
+    {% else %}<div class="thumb"></div>{% endif %}
+  </a>
+  <div style="min-width:0">
+    <div class="tile-head"><div><a href="{% url 'printer_detail' p.pk %}" style="text-decoration:none"><b>{{ p.name }}</b></a><div class="model">{{ p.profile.title|default:p.profile_id }}{% if p.zone %} · {{ p.zone }}{% endif %}</div></div>
+      <span class="status"><span class="dot"></span>{{ s.label }}</span></div>
+    {% if s.status == "offline" %}
+      <div class="meta">{{ s.message|default:"Принтер не отвечает" }} · {{ p.host }}{% if p.last_seen_at %}<br>Последний ответ {{ p.last_seen_at|date:"d.m H:i" }}{% endif %}</div>
+    {% elif s.job %}
+      <div class="big">{{ s.job.percent }} %<small>{% if s.job.remaining is not None %}осталось {{ s.job.remaining|duration }}{% endif %}</small></div>
+      <div class="bar" style="margin-top:6px"><i style="width:{{ s.job.percent }}%"></i></div>
+      <div class="meta">{{ s.job.filename }}{% if s.job.layer %}<br>слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% endif %}</div>
+    {% elif s.status == "finished" %}
+      <div class="meta">Печать завершена — снимите изделие со стола.</div>
+    {% elif s.status == "error" %}
+      <div class="meta">{{ s.message }}</div>
+    {% endif %}
+    {% if s.temps.nozzle %}<div class="temps"><span>Сопло {{ s.temps.nozzle.0|floatformat:0 }}°</span><span>Стол {{ s.temps.bed.0|floatformat:0 }}°</span>{% if s.temps.chamber %}<span>Камера {{ s.temps.chamber.0|floatformat:0 }}°</span>{% endif %}</div>{% endif %}
+    <div class="acts">
+      {% if "print_control" in rights %}
+        {% if s.status == "printing" and p.profile.capabilities and "pause" in p.profile.capabilities %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'pause' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm">Пауза</button></form>{% endif %}
+        {% if s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'resume' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm">Продолжить</button></form>{% endif %}
+      {% endif %}
+      {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm pri">Снял изделие</button></form>{% endif %}
+      {% if s.status == "ready" and "print_control" in rights %}<a class="btn sm pri" href="{% url 'printer_detail' p.pk %}?tab=files">Поставить на печать</a>{% endif %}
+    </div>
+  </div>
+</div>
+{% endwith %}

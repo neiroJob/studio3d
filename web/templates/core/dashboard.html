@@ -5,17 +5,8 @@
 {% if not can_view %}
   <div class="panel">У вашей роли нет права «Видеть дашборд и камеры». Обратитесь к администратору.</div>
 {% else %}
-  {% if tariff is not None or users_count is not None or last_backup is not None %}
-  <div class="cards">
-    {% if users_count is not None %}<a class="panel card" style="text-decoration:none" href="{% url 'users' %}"><b>{{ users_count }}</b><span>активных пользователей</span></a>{% endif %}
-    {% if tariff is not None %}<div class="panel card"><b>{{ tariff.price_kwh }} ₽</b><span>за кВт·ч с {{ tariff.valid_from|date:"d.m.Y" }}</span></div>{% endif %}
-    {% if last_backup is not None %}<a class="panel card" style="text-decoration:none" href="{% url 'backups' %}"><b>{{ last_backup.name|slice:"9:19" }}</b><span>последняя резервная копия</span></a>{% endif %}
-  </div>
-  {% endif %}
-  <div class="stub">
-    <b>Принтеров пока нет.</b><br>
-    Каркас системы готов: вход, роли, пользователи, настройки студии и резервные копии.
-    Подключение принтеров QIDI и Elegoo появится на этапе 3, Creality K1/K1C — на этапе 4.
+  <div hx-get="{% url 'printer_tiles' %}?f={{ filter }}" hx-trigger="every 3s" hx-swap="innerHTML">
+    {% include "printers/_tiles.html" %}
   </div>
 {% endif %}
 {% endblock %}

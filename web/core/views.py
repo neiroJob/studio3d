@@ -12,7 +12,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.roles import ROLE_ADMIN, right_required, user_rights
+from accounts.roles import ROLE_ADMIN, has_right, right_required, user_rights
 
 from . import audit
 from .forms import SetupForm, StudioSettingsForm, TariffForm
@@ -69,14 +69,11 @@ def setup(request):
 
 
 def dashboard(request):
-    rights = user_rights(request.user)
-    context = {"can_view": "view_dashboard" in rights}
-    if "tariffs_view" in rights or "tariffs_edit" in rights:
-        context["tariff"] = ElectricityTariff.on_date()
-    if "users_manage" in rights:
-        context["users_count"] = User.objects.filter(is_active=True).count()
-    if "studio_settings" in rights:
-        context["last_backup"] = next(iter(_backup_files()), None)
+    from printers.views import dashboard_context
+
+    context = {"can_view": has_right(request.user, "view_dashboard")}
+    if context["can_view"]:
+        context.update(dashboard_context(request))
     return render(request, "core/dashboard.html", context)
 
 

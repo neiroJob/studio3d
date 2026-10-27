@@ -1,0 +1,20 @@
+{% if not items and filter == "all" %}
+  <div class="stub"><b>Принтеров пока нет.</b>
+    {% if "printers_manage" in rights %}<div style="margin-top:10px"><a class="btn pri" href="{% url 'printer_add' %}">Добавить принтер</a></div>
+    {% else %}<br>Принтеры добавляет администратор.{% endif %}</div>
+{% else %}
+<div class="strip">{% for s in strip %}<a href="?f={{ s.key }}" class="{% if s.key == filter %}on{% endif %}"><b>{{ s.count }}</b><span><span class="dot" style="background:var({{ s.color }})"></span>{{ s.label }}</span></a>{% endfor %}</div>
+<div class="g21">
+  <div class="tiles">{% for item in items %}{% include "printers/_tile.html" %}{% empty %}<p class="muted">Нет принтеров в этом состоянии.</p>{% endfor %}</div>
+  <div class="stack">
+    <div class="panel"><h2>Требует внимания</h2>
+      {% for it in attention %}
+        <div class="alert"><span class="dot" style="background:var({{ it.state.color }})"></span><div><b>{{ it.printer.name }}:</b>
+          {% if it.state.status == "error" %}{{ it.state.message|default:"ошибка" }}{% elif it.state.status == "finished" %}печать завершена, изделие ждёт снятия{% else %}печать на паузе{% endif %}
+          <a href="{% url 'printer_detail' it.printer.pk %}">Открыть</a></div></div>
+      {% empty %}<p class="muted small" style="margin:0">Всё в порядке.</p>{% endfor %}
+    </div>
+    {% if "printers_manage" in rights %}<a class="btn" href="{% url 'printer_add' %}">Добавить принтер</a>{% endif %}
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:880px" id="printer-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <h2>1. Модель</h2>
+  <div class="form">
+    <div class="field"><label for="f-man">Производитель</label>
+      <select id="f-man" data-models-for="id_profile_id"><option value="">Выберите</option></select></div>
+    {% include "_field.html" with field=form.profile_id %}
+  </div>
+  <script type="application/json" id="profiles-data">{{ profiles_json|safe }}</script>
+  <p class="hint">Нет нужной модели? Профили новых моделей добавляются расширениями (этап 9).</p>
+
+  <h2 style="margin-top:20px">2. Подключение</h2>
+  <div class="form">
+    {% include "_field.html" with field=form.name %}
+    {% include "_field.html" with field=form.host %}
+    {% include "_field.html" with field=form.port %}
+    {% include "_field.html" with field=form.api_key %}
+    {% include "_field.html" with field=form.zone %}
+    {% if form.enabled %}{% include "_field.html" with field=form.enabled %}{% endif %}
+  </div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn" type="button" hx-post="{% url 'printer_check' %}" hx-include="#printer-form" hx-target="#check-result" hx-indicator="#check-wait">Проверить связь</button>
+    <span id="check-wait" class="htmx-indicator muted small">проверяю…</span>
+  </div>
+  <div id="check-result"></div>
+
+  <h2 style="margin-top:20px">3. Учёт и себестоимость</h2>
+  <div class="form">
+    {% include "_field.html" with field=form.power_w %}
+    {% include "_field.html" with field=form.purchase_cost %}
+    {% include "_field.html" with field=form.amortization_hours %}
+    {% include "_field.html" with field=form.print_hours_base %}
+  </div>
+  <p class="hint">Привязка розетки появится вместе с устройствами (этап 9).</p>
+
+  <div class="form-actions">
+    <button class="btn pri" type="submit">{% if printer %}Сохранить{% else %}Добавить принтер{% endif %}</button>
+    <a class="btn" href="{% if printer %}{% url 'printer_detail' printer.pk %}{% else %}{% url 'dashboard' %}{% endif %}">Отмена</a>
+  </div>
+</form>
+{% if printer %}
+<form method="post" action="{% url 'printer_delete' printer.pk %}" style="margin-top:12px" onsubmit="return confirm('Удалить принтер {{ printer.name|escapejs }}? История его заданий тоже удалится.')">{% csrf_token %}<button class="btn warn" type="submit">Удалить принтер</button></form>
+{% endif %}
+{% endblock %}

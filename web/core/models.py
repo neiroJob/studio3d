@@ -80,6 +80,15 @@ class AuditLog(models.Model):
         SETTINGS = "settings", "Настройки студии изменены"
         TARIFF = "tariff", "Тариф добавлен"
         BACKUP_DOWNLOAD = "backup_download", "Бэкап скачан"
+        PRINTER_ADD = "printer_add", "Принтер добавлен"
+        PRINTER_UPDATE = "printer_update", "Принтер изменён"
+        PRINTER_DELETE = "printer_delete", "Принтер удалён"
+        PRINT_START = "print_start", "Печать запущена"
+        PRINT_PAUSE = "print_pause", "Печать на паузе"
+        PRINT_RESUME = "print_resume", "Печать продолжена"
+        PRINT_CANCEL = "print_cancel", "Печать отменена"
+        FILE_UPLOAD = "file_upload", "Файл загружен на принтер"
+        PLATE_CLEARED = "plate_cleared", "Изделие снято"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

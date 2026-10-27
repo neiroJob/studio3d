@@ -45,3 +45,65 @@
   });
   document.addEventListener("DOMContentLoaded", function () { apply(current()); });
 })();
+
+// Превью камер: обновление раз в N секунд, только когда вкладка видна.
+(function () {
+  function refresh() {
+    if (document.hidden) return;
+    document.querySelectorAll("img[data-refresh]").forEach(function (img) {
+      const base = img.getAttribute("src").split("?")[0];
+      const next = new Image();
+      next.onload = function () { img.src = next.src; };
+      next.src = base + "?t=" + Date.now();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    const sec = parseInt(document.body.dataset.cameraRefresh || "10", 10);
+    setInterval(refresh, Math.max(sec, 2) * 1000);
+  });
+})();
+
+// Форма принтера: производитель → модель; порт и мощность из профиля; наработка из проверки связи.
+(function () {
+  function setup() {
+    const man = document.getElementById("f-man");
+    const dataEl = document.getElementById("profiles-data");
+    if (!man || !dataEl) return;
+    const data = JSON.parse(dataEl.textContent);
+    const model = document.getElementById(man.dataset.modelsFor);
+    const selected = model.value;
+    let byId = {};
+    Object.keys(data).forEach(function (m) {
+      man.add(new Option(m, m));
+      data[m].forEach(function (p) { byId[p.id] = Object.assign({ man: m }, p); });
+    });
+    function fillModels(keep) {
+      const list = data[man.value] || [];
+      model.innerHTML = "";
+      model.add(new Option(man.value ? "Выберите" : "Сначала производитель", ""));
+      list.forEach(function (p) { model.add(new Option(p.model + (p.verified ? "" : " (не проверено)"), p.id)); });
+      model.disabled = !man.value;
+      if (keep) model.value = keep;
+    }
+    function applyProfile() {
+      const p = byId[model.value];
+      if (!p) return;
+      const port = document.getElementById("id_port");
+      const power = document.getElementById("id_power_w");
+      if (port) port.placeholder = String(p.port);
+      if (power && !power.value && p.power_w) power.value = p.power_w;
+    }
+    if (selected && byId[selected]) man.value = byId[selected].man;
+    else if (Object.keys(data).length === 1) man.value = Object.keys(data)[0];
+    fillModels(selected);
+    applyProfile();
+    man.addEventListener("change", function () { fillModels(""); });
+    model.addEventListener("change", applyProfile);
+  }
+  document.addEventListener("DOMContentLoaded", setup);
+  document.addEventListener("htmx:afterSwap", function (e) {
+    const box = e.target.querySelector("[data-fill-hours]");
+    const field = document.getElementById("id_print_hours_base");
+    if (box && field && !field.value) field.value = box.dataset.fillHours.replace(",", ".");
+  });
+})();

@@ -4,13 +4,14 @@
 {% include "_head.html" %}
 <title>{% block title %}{% endblock %} — {{ studio_name }}</title>
 </head>
-<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' data-camera-refresh="{{ camera_refresh }}">
 {% with url=request.resolver_match.url_name %}
 <div class="app">
   <aside class="side">
     {% include "_brand.html" %}
     <nav class="nav">
-      <a href="{% url 'dashboard' %}" class="{% if url == 'dashboard' %}on{% endif %}">Дашборд</a>
+      <a href="{% url 'dashboard' %}" class="{% if url == 'dashboard' or url == 'printer_detail' %}on{% endif %}">Дашборд</a>
+      {% if "printers_manage" in rights %}<a href="{% url 'printer_add' %}" class="{% if url == 'printer_add' %}on{% endif %}">Добавить принтер</a>{% endif %}
       {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
         <div class="nav-group">Администрирование</div>
       {% endif %}

@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8000
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
-CMD ["gunicorn", "studio3d.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--access-logfile", "-"]
+CMD ["gunicorn", "studio3d.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--worker-class", "gthread", "--threads", "8", "--timeout", "300", "--access-logfile", "-"]
