@@ -107,3 +107,89 @@
     if (box && field && !field.value) field.value = box.dataset.fillHours.replace(",", ".");
   });
 })();
+
+// Загрузка G-code: прогресс «браузер → сервер» по событиям XHR, затем «сервер → принтер» опросом.
+(function () {
+  function mb(n) { return (n / 1048576).toFixed(1).replace(".", ",") + " МБ"; }
+  function setup(form) {
+    const box = form.querySelector(".upload-progress");
+    const bar = form.querySelector("[data-up-bar]");
+    const stage = form.querySelector("[data-up-stage]");
+    const text = form.querySelector("[data-up-text]");
+    const hint = form.querySelector("[data-up-hint]");
+    const cancel = form.querySelector("[data-up-cancel]");
+    const submit = form.querySelector("button[type=submit]");
+    let xhr = null, poll = null;
+
+    function show(title, sent, total) {
+      stage.textContent = title;
+      if (total) {
+        const pct = Math.min(100, Math.round(sent / total * 100));
+        bar.style.width = pct + "%";
+        text.textContent = pct + " % · " + mb(sent) + " из " + mb(total);
+        box.classList.remove("indeterminate");
+      } else {
+        text.textContent = "";
+        box.classList.add("indeterminate");
+      }
+    }
+    function finish() {
+      if (poll) clearInterval(poll);
+      poll = null; xhr = null;
+      submit.disabled = false;
+      cancel.hidden = false;
+    }
+
+    form.addEventListener("submit", function (e) {
+      const file = form.querySelector("input[type=file]").files[0];
+      if (!file || !window.XMLHttpRequest || !window.FormData) return; // обычная отправка формы
+      e.preventDefault();
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const data = new FormData(form);
+      data.append("upload_id", id);
+      xhr = new XMLHttpRequest();
+      xhr.open("POST", form.action);
+      xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+      box.hidden = false;
+      submit.disabled = true;
+      hint.textContent = "Не закрывайте страницу до окончания загрузки.";
+      show("Загрузка на сервер", 0, file.size);
+
+      xhr.upload.onprogress = function (ev) {
+        if (ev.lengthComputable) show("Загрузка на сервер", ev.loaded, ev.total);
+      };
+      xhr.upload.onload = function () {
+        // Файл на сервере — теперь сервер передаёт его на принтер.
+        show("Передача на принтер", 0, 0);
+        cancel.hidden = true; // отменить передачу на принтер уже нельзя
+        const url = form.dataset.progressUrl.replace("ID", id);
+        poll = setInterval(function () {
+          fetch(url, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (p) {
+            if (p.total && xhr) show("Передача на принтер", p.sent, p.total);
+          }).catch(function () {});
+        }, 700);
+      };
+      xhr.onload = function () {
+        let target = null;
+        try { target = JSON.parse(xhr.responseText).redirect; } catch (err) { /* не JSON */ }
+        finish();
+        if (target) { show("Готово", 1, 1); window.location.href = target; }
+        else { stage.textContent = "Ошибка"; hint.textContent = "Сервер ответил ошибкой (HTTP " + xhr.status + ")."; }
+      };
+      xhr.onerror = function () {
+        finish();
+        stage.textContent = "Ошибка";
+        hint.textContent = "Связь с сервером прервалась. Попробуйте ещё раз.";
+      };
+      xhr.onabort = function () {
+        finish();
+        box.hidden = true;
+      };
+      xhr.send(data);
+    });
+    cancel.addEventListener("click", function () { if (xhr) xhr.abort(); });
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("form[data-upload]").forEach(setup);
+  });
+})();

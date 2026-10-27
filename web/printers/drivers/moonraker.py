@@ -285,13 +285,38 @@ class MoonrakerClient(base.BaseClient):
     def file_metadata(self, filename):
         return self.get("/server/files/metadata", filename=filename) or {}
 
-    def upload(self, fileobj, filename, start=False):
-        data = {"root": "gcodes"}
+    def upload(self, fileobj, filename, start=False, progress=None):
+        """Загрузка G-code. progress(sent, total) вызывается по мере отправки на принтер."""
+        from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncoderMonitor
+
+        fields = {"root": "gcodes", "file": (filename, fileobj, "application/octet-stream")}
         if start:
-            data["print"] = "true"
-        return self._request(
-            "POST", "/server/files/upload", files={"file": (filename, fileobj)}, data=data, timeout=300
-        )
+            fields["print"] = "true"
+        encoder = MultipartEncoder(fields=fields)
+        total = encoder.len
+        last = [0.0]
+
+        def callback(monitor):
+            now = time.monotonic()
+            if progress and (now - last[0] > 0.3 or monitor.bytes_read >= total):
+                last[0] = now
+                progress(monitor.bytes_read, total)
+
+        body = MultipartEncoderMonitor(encoder, callback)
+        try:
+            resp = requests.post(
+                self.base_url + "/server/files/upload",
+                data=body,
+                headers={**self._headers(), "Content-Type": body.content_type},
+                timeout=(self.timeout, 600),
+            )
+        except requests.Timeout as e:
+            raise base.DriverError("Принтер не ответил вовремя при загрузке файла") from e
+        except requests.ConnectionError as e:
+            raise base.DriverError("Связь с принтером прервалась при загрузке файла") from e
+        if resp.status_code >= 400:
+            raise base.DriverError(f"Принтер не принял файл (HTTP {resp.status_code})")
+        return resp.json().get("result")
 
 
 def fetch_snapshot(url, timeout=5):

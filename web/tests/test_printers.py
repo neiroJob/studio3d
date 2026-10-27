@@ -437,3 +437,33 @@ def test_klipper_error_explained():
     assert s["status"] == base.ERROR
     assert s["message"].startswith("Оси не в исходном положении") and "Must home axis first" in s["message"]
     assert s["job"]["filename"] == ".cache/project_2_PETG_4h4m.gcode"
+
+
+def test_upload_reports_progress(fake):
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=Q1)
+    calls = []
+    payload = b"G1 X1\n" * 200_000  # ~1,2 МБ
+    c.upload(io.BytesIO(payload), "big.gcode", progress=lambda sent, total: calls.append((sent, total)))
+    assert fake.uploads[-1] == {"filename": "big.gcode", "size": len(payload), "print": None}
+    assert calls and calls[-1][0] == calls[-1][1] and calls[-1][1] > len(payload)
+
+
+@pytest.mark.django_db
+def test_upload_xhr_returns_redirect_and_clears_progress(client, fake):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer(port=fake.port)
+    login(client, "sergey")
+    url = reverse("printer_upload", args=[p.pk])
+    resp = client.post(
+        url,
+        {"file": SimpleUploadedFile("part.gcode", b"G28\n"), "upload_id": "abc12345xyz"},
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+    assert resp.json() == {"redirect": reverse("printer_detail", args=[p.pk]) + "?tab=files"}
+    progress = client.get(reverse("printer_upload_progress", args=[p.pk, "abc12345xyz"]))
+    assert progress.json() == {}
+    assert client.get(reverse("printer_upload_progress", args=[p.pk, "BAD!"])).status_code == 404
+    html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
+    assert "загружен" in html and "data-upload" in html

@@ -75,7 +75,8 @@ class BaseClient:
     def start(self, filename):
         raise NotImplementedError
 
-    def upload(self, fileobj, filename, start=False):
+    def upload(self, fileobj, filename, start=False, progress=None):
+        """progress(sent, total) — по мере отправки на принтер."""
         raise NotImplementedError
 
 

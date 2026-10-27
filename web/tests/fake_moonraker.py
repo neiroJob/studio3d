@@ -100,7 +100,7 @@ class FakeMoonraker:
             await ws.close()
 
     def app(self):
-        app = web.Application()
+        app = web.Application(client_max_size=100 * 1024 * 1024)
         app.router.add_get("/server/info", self.server_info)
         app.router.add_get("/printer/info", self.printer_info)
         app.router.add_get("/printer/objects/query", self.objects_query)

@@ -1,9 +1,10 @@
 import json
+import re
 import time
 
 from django.contrib import messages
 from django.core.cache import cache
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -205,11 +206,27 @@ def start(request, pk):
     return _redirect_back(request, printer)
 
 
+UPLOAD_ID_RE = re.compile(r"^[a-z0-9]{8,40}$")
+
+
+def _upload_key(pk, upload_id):
+    return f"printer:upload:{pk}:{upload_id}"
+
+
 @right_required("print_control")
 @require_POST
 def upload(request, pk):
+    """Загрузка G-code на принтер.
+
+    Браузер отправляет файл через XMLHttpRequest и сам показывает прогресс загрузки на сервер.
+    Вторую часть — передачу с сервера на принтер — он узнаёт опросом upload_progress по upload_id.
+    """
     printer = get_object_or_404(Printer, pk=pk)
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    upload_id = request.POST.get("upload_id", "")
+    key = _upload_key(pk, upload_id) if UPLOAD_ID_RE.match(upload_id) else None
     form = UploadForm(request.POST, request.FILES)
+    target = reverse("printer_detail", args=[pk]) + "?tab=files"
     if not printer.can("upload"):
         messages.error(request, "Эта модель не поддерживает загрузку файлов.")
     elif not form.is_valid():
@@ -221,8 +238,13 @@ def upload(request, pk):
         if blocked:
             messages.error(request, f"{printer.name}: {blocked} Файл не загружен.")
         else:
+
+            def progress(sent, total):
+                if key:
+                    cache.set(key, {"sent": sent, "total": total}, timeout=600)
+
             try:
-                client_for(printer).upload(f, f.name, start=start_now)
+                client_for(printer).upload(f, f.name, start=start_now, progress=progress)
             except DriverError as e:
                 messages.error(request, f"{printer.name}: {e}")
             else:
@@ -232,8 +254,19 @@ def upload(request, pk):
                 text = "загружен и запущен" if start_now else "загружен"
                 messages.success(request, f"{printer.name}: файл «{f.name}» {text}.")
                 if start_now:
-                    return redirect("printer_detail", pk=pk)
-    return redirect(reverse("printer_detail", args=[pk]) + "?tab=files")
+                    target = reverse("printer_detail", args=[pk])
+    if key:
+        cache.delete(key)
+    if is_xhr:
+        return JsonResponse({"redirect": target})
+    return redirect(target)
+
+
+@right_required("print_control")
+def upload_progress(request, pk, upload_id):
+    if not UPLOAD_ID_RE.match(upload_id):
+        return JsonResponse({}, status=404)
+    return JsonResponse(cache.get(_upload_key(pk, upload_id)) or {})
 
 
 # --- добавление и настройки -------------------------------------------------------------------

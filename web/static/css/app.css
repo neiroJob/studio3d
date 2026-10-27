@@ -24,6 +24,7 @@
   --shadow:none; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 "Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
 a{color:inherit}
@@ -56,6 +57,7 @@ main{padding:22px;max-width:1360px;width:100%}
 .btn.pri:hover{filter:brightness(1.07)}
 .btn.warn{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,var(--line))}
 .btn.sm{padding:4px 9px;font-size:13px}
+.btn:disabled{opacity:.55;cursor:default;filter:none}
 .icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:34px;height:34px;cursor:pointer;display:inline-grid;place-items:center;font-size:16px;line-height:1}
 .top .menu-btn{display:none}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -164,6 +166,12 @@ tr.off td{color:var(--ink3)}
 .result.ok{border-color:var(--st-print);background:color-mix(in srgb,var(--st-print) 10%,transparent)}
 .result.bad{border-color:var(--st-err);background:color-mix(in srgb,var(--st-err) 10%,transparent)}
 .pill.c{border-color:transparent;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c);font-weight:600}
+/* загрузка файла */
+.upload-progress{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.upload-progress .bar{height:10px}
+.upload-progress .bar i{transition:width .2s}
+.upload-progress.indeterminate .bar i{width:30%!important;animation:upmove 1.2s ease-in-out infinite}
+@keyframes upmove{0%{margin-left:0}50%{margin-left:70%}100%{margin-left:0}}
 @media (max-width:1000px){.g21,.g32{grid-template-columns:1fr}}
 @media (max-width:480px){.tile{grid-template-columns:90px 1fr}.tile .thumb{width:90px}.tiles{grid-template-columns:1fr}}
 
