@@ -27,3 +27,6 @@ Thumbs.db
 # Django
 web/staticfiles/
 web/db.sqlite3
+
+# Папка, куда приложение Claude кладёт файлы из чата
+Claude outputs/
