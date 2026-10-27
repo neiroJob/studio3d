@@ -89,6 +89,7 @@ class AuditLog(models.Model):
         PRINT_CANCEL = "print_cancel", "Печать отменена"
         FILE_UPLOAD = "file_upload", "Файл загружен на принтер"
         PLATE_CLEARED = "plate_cleared", "Изделие снято"
+        PRINTER_LIGHT = "printer_light", "Свет принтера"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

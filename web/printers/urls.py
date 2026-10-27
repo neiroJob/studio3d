@@ -16,5 +16,6 @@ urlpatterns = [
     path("printers/<int:pk>/upload/", views.upload, name="printer_upload"),
     path("printers/<int:pk>/upload/<str:upload_id>/", views.upload_progress, name="printer_upload_progress"),
     path("printers/<int:pk>/cleared/", views.plate_cleared, name="printer_cleared"),
+    path("printers/<int:pk>/light/<str:mode>/", views.light, name="printer_light"),
     path("printers/<int:pk>/<str:action>/", views.command, name="printer_command"),
 ]

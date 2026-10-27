@@ -136,6 +136,9 @@
     0.0
    ],
    "extruder": "extruder"
+  },
+  "output_pin caselight": {
+   "value": 0.0
   }
  },
  "objects": [

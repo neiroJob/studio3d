@@ -127,6 +127,7 @@ class FakeMoonraker:
         app.router.add_get("/server/files/gcodes/{path:.*}", self.gcode_file)
         for name in ("pause", "resume", "cancel", "start"):
             app.router.add_post(f"/printer/print/{name}", self.command)
+        app.router.add_post("/printer/gcode/script", self.command)
         app.router.add_get("/websocket", self.websocket)
         return app
 

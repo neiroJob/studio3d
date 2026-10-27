@@ -40,6 +40,8 @@ def subscribe_objects(profile):
     chamber = (profile.objects.get("chamber") if profile else None) or ""
     if chamber:
         objects[chamber] = TEMP_FIELDS
+    if profile and profile.light_object:
+        objects[profile.light_object] = ["value"]
     return objects
 
 
@@ -139,7 +141,10 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
             "filament_g_total": meta.get("filament_weight_total"),
         }
 
-    return {"status": result, "message": message, "temps": temps, "job": job, "updated": now}
+    light = None
+    if profile and profile.light_object and isinstance(status.get(profile.light_object), dict):
+        light = float(status[profile.light_object].get("value") or 0) > 0
+    return {"status": result, "message": message, "temps": temps, "job": job, "light": light, "updated": now}
 
 
 def job_from_history(item):
@@ -264,6 +269,14 @@ class MoonrakerClient(base.BaseClient):
 
     def start(self, filename):
         self.post("/printer/print/start", filename=filename)
+
+    def gcode(self, script):
+        self.post("/printer/gcode/script", script=script)
+
+    def set_light(self, on):
+        if not self.profile or not self.profile.light_on:
+            raise base.DriverError("У этой модели нет управления светом")
+        self.gcode(self.profile.light_on if on else self.profile.light_off)
 
     # --- файлы ---
 

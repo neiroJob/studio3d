@@ -24,7 +24,13 @@ camera:
   # У QIDI камера не зарегистрирована в Moonraker (server/webcams/list пуст), адрес задаём здесь.
   snapshot_url: "http://{host}:8080/?action=snapshot"
 
-capabilities: [pause, resume, cancel, start_file, upload]
+capabilities: [pause, resume, cancel, start_file, upload, light]
+
+# Подсветка камеры: [output_pin caselight], pwm: false (конфиг QIDI). Объект есть у принтера — запись 2026-10-27.
+light:
+  object: "output_pin caselight"
+  on_gcode: "SET_PIN PIN=caselight VALUE=1"
+  off_gcode: "SET_PIN PIN=caselight VALUE=0"
 
 tools: 1
 

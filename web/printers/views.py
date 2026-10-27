@@ -19,7 +19,7 @@ from .forms import PrinterForm, UploadForm
 from .gcode_check import check_gcode, read_head_tail
 from .models import Printer
 from .profiles import get_profile, manufacturers
-from .state import read_state, read_states, view_state
+from .state import read_state, read_states, view_state, write_state
 
 FILTERS = [
     ("all", "Все принтеры", "--ink3"),
@@ -160,6 +160,27 @@ def command(request, pk, action):
     else:
         audit.log(request, audit_action, target=printer.name)
         messages.success(request, f"{printer.name}: {ok_text}")
+    return _redirect_back(request, printer)
+
+
+@right_required("print_control")
+@require_POST
+def light(request, pk, mode):
+    printer = get_object_or_404(Printer, pk=pk)
+    if mode not in ("on", "off") or not printer.can("light"):
+        messages.error(request, "У этой модели нет управления светом.")
+        return _redirect_back(request, printer)
+    try:
+        client_for(printer).set_light(mode == "on")
+    except DriverError as e:
+        messages.error(request, f"{printer.name}: {e}")
+    else:
+        audit.log(request, audit.Action.PRINTER_LIGHT, target=printer.name, on=mode == "on")
+        # Состояние в кэше обновит коллектор; отражаем сразу, чтобы кнопка не «мигала».
+        state = read_state(printer.pk)
+        if state:
+            state["light"] = mode == "on"
+            write_state(printer.pk, state)
     return _redirect_back(request, printer)
 
 

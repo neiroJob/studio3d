@@ -15,7 +15,10 @@
     objects.chamber имя объекта Klipper с температурой камеры, или нет поля
     camera.type     mjpeg_snapshot | none
     camera.snapshot_url  адрес снимка, {host} заменяется на IP
-    capabilities    что умеет: pause, resume, cancel, start_file, upload
+    capabilities    что умеет: pause, resume, cancel, start_file, upload, light
+    light.object    объект Klipper с состоянием света (поле value > 0 — включён)
+    light.on_gcode / light.off_gcode  G-code включения и выключения света
+                    (не «on/off»: в YAML это читается как true/false)
     tools           число экструдеров (по умолчанию 1)
     gcode.start_macro   стартовый макрос, который должен быть в начале файла: PRINT_START
     gcode.model_names   как слайсеры пишут эту модель в «; printer_model = …»
@@ -28,7 +31,7 @@ from pathlib import Path
 import yaml
 
 BUILTIN_DIR = Path(__file__).resolve().parent / "profiles"
-CAPABILITIES = {"pause", "resume", "cancel", "start_file", "upload"}
+CAPABILITIES = {"pause", "resume", "cancel", "start_file", "upload", "light"}
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,9 @@ class Profile:
     camera_type: str = "none"
     snapshot_url: str = ""
     capabilities: frozenset = frozenset()
+    light_object: str = ""
+    light_on: str = ""
+    light_off: str = ""
     start_macro: str = ""
     model_names: tuple = ()
     tools: int = 1
@@ -76,6 +82,11 @@ def parse_profile(data, source="?"):
         conn = data.get("connection") or {}
         cam = data.get("camera") or {}
         gcode = data.get("gcode") or {}
+        light = data.get("light") or {}
+        if "light" in caps and not (light.get("object") and light.get("on_gcode") and light.get("off_gcode")):
+            raise ProfileError(
+                f"{source}: для возможности light нужны light.object, light.on_gcode и light.off_gcode"
+            )
         return Profile(
             id=str(data["id"]),
             manufacturer=str(data["manufacturer"]),
@@ -89,6 +100,9 @@ def parse_profile(data, source="?"):
             camera_type=str(cam.get("type", "none")),
             snapshot_url=str(cam.get("snapshot_url") or ""),
             capabilities=caps,
+            light_object=str(light.get("object") or ""),
+            light_on=str(light.get("on_gcode") or ""),
+            light_off=str(light.get("off_gcode") or ""),
             start_macro=str(gcode.get("start_macro") or ""),
             model_names=tuple(str(n) for n in (gcode.get("model_names") or [])),
             tools=int(data.get("tools", 1)),

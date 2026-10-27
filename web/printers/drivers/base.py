@@ -68,6 +68,10 @@ class BaseClient:
     def cancel(self):
         raise NotImplementedError
 
+    def set_light(self, on):
+        """Включить или выключить свет (если в профиле есть возможность light)."""
+        raise NotImplementedError
+
     def list_files(self):
         """[{"path": str, "size": int, "modified": unix time}] — новые сверху."""
         raise NotImplementedError

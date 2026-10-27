@@ -620,3 +620,39 @@ def test_monitor_collects_gcode_responses():
     last = states[-1]
     assert last["status"] == base.ERROR and "START_PRINT" in last["message"]
     assert "// old message" not in last["console"]  # очищено на новом задании
+
+
+# --- свет ---------------------------------------------------------------------------------------
+
+
+def test_light_state_and_subscription():
+    from printers.drivers.moonraker import subscribe_objects
+
+    assert Q1.can("light") and subscribe_objects(Q1)["output_pin caselight"] == ["value"]
+    data = load_fixture(REAL)
+    assert normalize(data["status"], profile=Q1)["light"] is False  # в записи 2026-10-27 свет выключен
+    data["status"]["output_pin caselight"]["value"] = 1.0
+    assert normalize(data["status"], profile=Q1)["light"] is True
+
+
+@pytest.mark.django_db
+def test_light_toggle(client, fake):
+    make_user("sergey", ROLE_OPERATOR)
+    make_user("anna", ROLE_MANAGER)
+    p = make_printer(port=fake.port)
+    write_state(
+        p.pk, {"status": base.READY, "temps": {}, "job": None, "light": False, "updated": time.time()}
+    )
+    login(client, "sergey")
+    html = client.get(reverse("printer_live", args=[p.pk])).content.decode()
+    assert "Свет в камере: <b>выключен</b>" in html and "Включить свет" in html
+    client.post(reverse("printer_light", args=[p.pk, "on"]))
+    assert ("/printer/gcode/script", {"script": "SET_PIN PIN=caselight VALUE=1"}) in fake.calls
+    assert read_state(p.pk)["light"] is True
+    assert AuditLog.objects.filter(action="printer_light", details__on=True).exists()
+    client.post(reverse("printer_light", args=[p.pk, "off"]))
+    assert ("/printer/gcode/script", {"script": "SET_PIN PIN=caselight VALUE=0"}) in fake.calls
+    client.post(reverse("logout"))
+    login(client, "anna")  # у менеджера нет права управлять принтером
+    assert client.post(reverse("printer_light", args=[p.pk, "on"])).status_code == 403
+    assert "Включить свет" not in client.get(reverse("printer_live", args=[p.pk])).content.decode()
