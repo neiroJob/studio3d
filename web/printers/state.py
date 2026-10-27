@@ -47,6 +47,16 @@ def view_state(printer, state=None):
     state["label"] = base.STATUS_LABELS.get(status, status)
     state["color"] = STATUS_COLORS.get(status, "--st-off")
     state["age"] = time.time() - float(state.get("updated") or 0)
+    # Нагрев без печати: например, макрос отмены на принтере оборвался и не выключил нагреватели.
+    names = {"nozzle": "сопло", "bed": "стол", "chamber": "камера"}
+    temps = state.get("temps") or {}
+    state["heating_idle"] = []
+    if status not in (base.PRINTING, base.PAUSED, base.OFFLINE):
+        state["heating_idle"] = [
+            f"{names[k]} {round(v[1])} °C"
+            for k, v in temps.items()
+            if k in names and v and float(v[1] or 0) > 0
+        ]
     job = state.get("job")
     if job:
         job["percent"] = round(float(job.get("progress") or 0) * 100)

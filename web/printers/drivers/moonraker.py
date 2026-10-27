@@ -199,6 +199,8 @@ class MoonrakerClient(base.BaseClient):
         if "error" in data:
             err = data["error"]
             text = err.get("message") if isinstance(err, dict) else str(err)
+            if text in ("Bad Request", "Internal Server Error", "Service Unavailable"):
+                text = f"принтер отклонил команду ({text})"
             raise base.DriverError(f"Принтер вернул ошибку: {text}")
         return data.get("result")
 
@@ -272,6 +274,10 @@ class MoonrakerClient(base.BaseClient):
 
     def gcode(self, script):
         self.post("/printer/gcode/script", script=script)
+
+    def heaters_off(self):
+        """Выключить все нагреватели (стандартная команда Klipper, в том числе нагреватель камеры)."""
+        self.gcode("TURN_OFF_HEATERS")
 
     def set_light(self, on):
         if not self.profile or not self.profile.light_on:

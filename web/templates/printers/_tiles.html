@@ -9,8 +9,9 @@
   <div class="stack">
     <div class="panel"><h2>Требует внимания</h2>
       {% for it in attention %}
-        <div class="alert"><span class="dot" style="background:var({{ it.state.color }})"></span><div><b>{{ it.printer.name }}:</b>
-          {% if it.state.status == "error" %}{{ it.state.message|default:"ошибка" }}{% elif it.state.status == "finished" %}печать завершена, изделие ждёт снятия{% else %}печать на паузе{% endif %}
+        <div class="alert"><span class="dot" style="background:var({% if it.state.heating_idle and it.state.status == 'ready' %}--st-pause{% else %}{{ it.state.color }}{% endif %})"></span><div><b>{{ it.printer.name }}:</b>
+          {% if it.state.status == "error" %}{{ it.state.message|default:"ошибка" }}{% elif it.state.status == "finished" %}печать завершена, изделие ждёт снятия{% elif it.state.status == "paused" %}печать на паузе{% endif %}
+          {% if it.state.heating_idle %}нагрев включён без печати: {{ it.state.heating_idle|join:", " }}.{% endif %}
           <a href="{% url 'printer_detail' it.printer.pk %}">Открыть</a></div></div>
       {% empty %}<p class="muted small" style="margin:0">Всё в порядке.</p>{% endfor %}
     </div>

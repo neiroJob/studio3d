@@ -5,6 +5,7 @@ import io
 import time
 
 import pytest
+from aiohttp import web
 from asgiref.sync import async_to_sync
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
@@ -656,3 +657,54 @@ def test_light_toggle(client, fake):
     login(client, "anna")  # у менеджера нет права управлять принтером
     assert client.post(reverse("printer_light", args=[p.pk, "on"])).status_code == 403
     assert "Включить свет" not in client.get(reverse("printer_live", args=[p.pk])).content.decode()
+
+
+# --- неудачная отмена и нагрев без печати (Q1 Pro, 2026-10-27) ------------------------------------
+
+
+@pytest.mark.django_db
+def test_failed_cancel_shows_klipper_error_and_heating_idle(client, fake):
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer(port=fake.port)
+
+    async def bad_request(request):
+        return web.json_response({"error": {"code": 400, "message": "Bad Request"}}, status=400)
+
+    # Подменяем обработчик отмены: так ответил реальный Q1 Pro, когда CANCEL_PRINT упал на «Move out of range».
+    fake.command_override = bad_request
+    write_state(
+        p.pk,
+        {
+            "status": base.READY,
+            "message": "",
+            "job": None,
+            "updated": time.time(),
+            "temps": {"nozzle": [33.2, 0.0], "bed": [32.4, 0.0], "chamber": [47.3, 50.0]},
+            "console": ["File selected", "!! Move out of range: 120.000 120.000 299.786 [0.000]"],
+        },
+    )
+    login(client, "sergey")
+    resp = client.post(reverse("printer_command", args=[p.pk, "cancel"]), follow=True)
+    html = resp.content.decode()
+    assert "принтер отклонил команду" in html and "Klipper: Move out of range" in html
+    assert "Макрос отмены на принтере не выполнился до конца" in html
+    assert "Нагрев включён без печати" in html and "камера 50 °C" in html
+    # кнопка «Выключить нагрев» отправляет TURN_OFF_HEATERS
+    client.post(reverse("printer_command", args=[p.pk, "heaters_off"]))
+    assert ("/printer/gcode/script", {"script": "TURN_OFF_HEATERS"}) in fake.calls
+    assert AuditLog.objects.filter(action="heaters_off").exists()
+    # и на дашборде это в «Требует внимания»
+    assert "нагрев включён без печати" in client.get("/").content.decode()
+
+
+def test_heating_idle_only_when_not_printing():
+    from printers.state import view_state
+
+    pr = Printer(name="x", profile_id="qidi_q1_pro", host="h", port=1)
+    temps = {"nozzle": [200, 250], "bed": [60, 60], "chamber": None}
+    assert view_state(pr, {"status": base.PRINTING, "temps": temps})["heating_idle"] == []
+    assert view_state(pr, {"status": base.READY, "temps": temps})["heating_idle"] == [
+        "сопло 250 °C",
+        "стол 60 °C",
+    ]
+    assert view_state(pr, {"status": base.READY, "temps": {"nozzle": [30, 0]}})["heating_idle"] == []

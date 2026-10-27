@@ -59,7 +59,7 @@ def dashboard_context(request):
     attention = [
         it
         for it in _items(list(Printer.objects.all()))
-        if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED)
+        if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED) or it["state"]["heating_idle"]
     ]
     back = reverse("dashboard") + (f"?f={current}" if current != "all" else "")
     return {"items": items, "strip": strip, "filter": current, "attention": attention, "back": back}
@@ -142,21 +142,40 @@ COMMANDS = {
     "pause": ("pause", "Пауза отправлена.", audit.Action.PRINT_PAUSE),
     "resume": ("resume", "Печать продолжается.", audit.Action.PRINT_RESUME),
     "cancel": ("cancel", "Печать отменена.", audit.Action.PRINT_CANCEL),
+    "heaters_off": ("heaters_off", "Нагреватели выключены.", audit.Action.HEATERS_OFF),
 }
+ALWAYS_AVAILABLE = {"heaters_off"}  # стандартные команды Klipper, в профиле не описываются
+
+
+def _klipper_error(printer):
+    """Последняя ошибка Klipper из сообщений принтера — она понятнее, чем ответ HTTP."""
+    state = read_state(printer.pk) or {}
+    errors = [line for line in state.get("console") or [] if line.startswith("!!")]
+    return errors[-1].lstrip("! ").strip() if errors else ""
 
 
 @right_required("print_control")
 @require_POST
 def command(request, pk, action):
     printer = get_object_or_404(Printer, pk=pk)
-    if action not in COMMANDS or not printer.can(action):
+    if action not in COMMANDS or not (action in ALWAYS_AVAILABLE or printer.can(action)):
         messages.error(request, "Эта модель не поддерживает команду.")
         return _redirect_back(request, printer)
     method, ok_text, audit_action = COMMANDS[action]
     try:
         getattr(client_for(printer), method)()
     except DriverError as e:
-        messages.error(request, f"{printer.name}: {e}")
+        text = f"{printer.name}: {e}"
+        klipper = _klipper_error(printer)
+        if klipper:
+            text += f". Klipper: {klipper}"
+        if action == "cancel":
+            text += (
+                ". Макрос отмены на принтере не выполнился до конца — проверьте, что печать остановлена "
+                "и нагреватели выключены."
+            )
+        messages.error(request, text)
+        audit.log(request, audit_action, target=printer.name, error=str(e), klipper=klipper)
     else:
         audit.log(request, audit_action, target=printer.name)
         messages.success(request, f"{printer.name}: {ok_text}")

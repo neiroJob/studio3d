@@ -26,6 +26,13 @@
     {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<button class="btn pri">Снял изделие</button></form>{% endif %}
   </div>
 </div>
+{% if s.heating_idle %}
+<div class="panel" style="border-color:var(--st-pause)">
+  <div class="row"><span><b>Нагрев включён без печати:</b> {{ s.heating_idle|join:", " }}.</span><span class="spacer"></span>
+  {% if can_control %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'heaters_off' %}">{% csrf_token %}<button class="btn sm warn">Выключить нагрев</button></form>{% endif %}</div>
+  <p class="hint" style="margin:6px 0 0">Такое бывает, если макрос отмены или завершения на принтере оборвался с ошибкой. Если нагрев включили намеренно, можно не обращать внимания.</p>
+</div>
+{% endif %}
 {% if p.profile.light_object and s.light is not None %}
 <div class="panel row" style="padding:12px 16px">
   <span>Свет в камере: <b>{% if s.light %}включён{% else %}выключен{% endif %}</b></span><span class="spacer"></span>

@@ -68,6 +68,10 @@ class BaseClient:
     def cancel(self):
         raise NotImplementedError
 
+    def heaters_off(self):
+        """Выключить все нагреватели."""
+        raise NotImplementedError
+
     def set_light(self, on):
         """Включить или выключить свет (если в профиле есть возможность light)."""
         raise NotImplementedError

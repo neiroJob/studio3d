@@ -23,7 +23,10 @@ class FakeMoonraker:
         self.status = json.loads(json.dumps(self.data["status"]))
         self.calls = []
         self.uploads = []
-        self.gcode_files = {}  # путь → bytes, для /server/files/gcodes/<путь>
+        self.gcode_files = {}
+        self.command_override = (
+            None  # подмена ответа на /printer/print/cancel  # путь → bytes, для /server/files/gcodes/<путь>
+        )
         self.ws_clients = []
         self.loop = None
         self.port = None
@@ -63,6 +66,8 @@ class FakeMoonraker:
 
     async def command(self, request):
         self.calls.append((request.path, dict(request.query)))
+        if self.command_override and request.path == "/printer/print/cancel":
+            return await self.command_override(request)
         return self._ok("ok")
 
     async def upload(self, request):
