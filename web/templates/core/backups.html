@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Резервные копии{% endblock %}
+{% block heading %}Резервные копии{% endblock %}
+{% block content %}
+<div class="note">Дамп базы данных делается автоматически раз в сутки (время и срок хранения — в файле .env: BACKUP_TIME, BACKUP_KEEP_DAYS). Файлы лежат на сервере в папке <code>backups/</code> рядом с docker-compose.yml. Восстановление — по README, раздел «Резервные копии».</div>
+<div class="panel">
+  <div class="tbl-wrap"><table>
+    <tr><th>Файл</th><th>Создан</th><th class="num">Размер, МБ</th><th></th></tr>
+    {% for b in items %}
+    <tr><td>{{ b.name }}</td><td>{{ b.mtime|date:"d.m.Y H:i" }}</td><td class="num">{{ b.size_mb|floatformat:2 }}</td>
+      <td class="num"><form class="inline" method="post" action="{% url 'backup_download' b.name %}">{% csrf_token %}<button class="btn sm" type="submit">Скачать</button></form></td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">Копий пока нет. Первая появится в ближайшее время по расписанию.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Роль{% endblock %}
+{% block heading %}{% if group %}Роль «{{ group.name }}»{% else %}Новая роль{% endif %}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:760px">
+  {% csrf_token %}
+  {% if is_admin_role %}<div class="note">Роль «Админ» нельзя изменить: у неё всегда все права.</div>{% endif %}
+  <div class="form">
+    {% include "_field.html" with field=form.name wide=True %}
+    {% include "_field.html" with field=form.rights wide=True %}
+  </div>
+  <div class="form-actions">
+    {% if not is_admin_role %}<button class="btn pri" type="submit">Сохранить</button>{% endif %}
+    <a class="btn" href="{% url 'roles' %}">Назад</a>
+  </div>
+</form>
+{% if can_delete %}
+<form method="post" action="{% url 'role_delete' group.pk %}" style="margin-top:12px">{% csrf_token %}<button class="btn warn" type="submit">Удалить роль</button></form>
+{% endif %}
+{% endblock %}

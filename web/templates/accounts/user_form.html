@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:760px">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="form">
+    {% for field in form %}{% include "_field.html" with field=field wide=field.field.widget.allow_multiple_selected %}{% endfor %}
+  </div>
+  {% if password_mode %}<p class="hint">Сообщите новый пароль пользователю лично. Самостоятельного восстановления пароля в системе нет.</p>{% endif %}
+  <div class="form-actions"><button class="btn pri" type="submit">Сохранить</button><a class="btn" href="{% url 'users' %}">Отмена</a></div>
+</form>
+{% endblock %}

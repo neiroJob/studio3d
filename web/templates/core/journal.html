@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Журнал действий{% endblock %}
+{% block heading %}Журнал действий{% endblock %}
+{% block content %}
+<div class="panel">
+  <form class="row" method="get" style="margin-bottom:12px">
+    <label class="field" style="min-width:240px"><span>Действие</span>
+      <select name="action" onchange="this.form.submit()">
+        <option value="">Все</option>
+        {% for code, name in actions %}<option value="{{ code }}" {% if code == action %}selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select></label>
+  </form>
+  <div class="tbl-wrap"><table>
+    <tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Объект</th><th>IP</th></tr>
+    {% for e in page %}
+    <tr><td>{{ e.created_at|date:"d.m.Y H:i:s" }}</td><td>{{ e.username|default:"—" }}</td><td>{{ e.get_action_display }}</td><td>{{ e.target }}</td><td class="muted">{{ e.ip|default:"" }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="muted">Записей нет</td></tr>{% endfor %}
+  </table></div>
+  {% if page.paginator.num_pages > 1 %}
+  <div class="pager">
+    {% if page.has_previous %}<a class="btn sm" href="?page={{ page.previous_page_number }}&action={{ action }}">← Новее</a>{% endif %}
+    <span class="muted">Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a class="btn sm" href="?page={{ page.next_page_number }}&action={{ action }}">Старее →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

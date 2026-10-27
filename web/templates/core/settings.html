@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block heading %}{% if settings_form %}Настройки и тарифы{% else %}Тарифы{% endif %}{% endblock %}
+{% block content %}
+<div class="grid2">
+  {% if settings_form %}
+  <form class="panel" method="post" novalidate>
+    {% csrf_token %}<input type="hidden" name="form" value="studio">
+    <h2>Студия</h2>
+    {{ settings_form.non_field_errors }}
+    <div class="form">
+      {% include "_field.html" with field=settings_form.name wide=True %}
+      {% include "_field.html" with field=settings_form.timezone wide=True %}
+    </div>
+    <p class="hint">Время в базе хранится в UTC и показывается в часовом поясе студии.</p>
+    <div class="form-actions"><button class="btn pri" type="submit">Сохранить</button></div>
+  </form>
+  {% endif %}
+  <div class="panel">
+    <h2>Тариф электроэнергии</h2>
+    <p>Действует сейчас: {% if current_tariff %}<b>{{ current_tariff.price_kwh }} ₽ за кВт·ч</b> с {{ current_tariff.valid_from|date:"d.m.Y" }}{% else %}<span class="muted">не задан</span>{% endif %}</p>
+    {% if tariff_form %}
+    <form method="post" novalidate>
+      {% csrf_token %}<input type="hidden" name="form" value="tariff">
+      <h3>Новый тариф</h3>
+      <div class="form">
+        {% include "_field.html" with field=tariff_form.price_kwh %}
+        {% include "_field.html" with field=tariff_form.valid_from %}
+      </div>
+      <p class="hint">Тарифы версионируются по дате: уже рассчитанные заказы не пересчитываются.</p>
+      <div class="form-actions"><button class="btn pri" type="submit">Добавить тариф</button></div>
+    </form>
+    {% endif %}
+    <h3>История</h3>
+    <div class="tbl-wrap"><table>
+      <tr><th>Действует с</th><th class="num">₽ за кВт·ч</th><th>Кто добавил</th></tr>
+      {% for t in tariffs %}<tr><td>{{ t.valid_from|date:"d.m.Y" }}</td><td class="num">{{ t.price_kwh }}</td><td>{{ t.created_by.username|default:"—" }}</td></tr>
+      {% empty %}<tr><td colspan="3" class="muted">Тарифов нет</td></tr>{% endfor %}
+    </table></div>
+  </div>
+</div>
+{% endblock %}

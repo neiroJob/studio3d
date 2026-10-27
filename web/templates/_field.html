@@ -1,0 +1,14 @@
+{% with w=field.field.widget %}
+<div class="field{% if wide %} wide{% endif %}">
+  {% if w.input_type == "checkbox" and not w.allow_multiple_selected %}
+    <label class="check">{{ field }} {{ field.label }}</label>
+  {% else %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {% if w.input_type == "password" %}
+      <span class="pass-wrap">{{ field }}<button type="button" data-show-pass>показать</button></span>
+    {% else %}{{ field }}{% endif %}
+  {% endif %}
+  {% if field.help_text %}<span class="helptext">{{ field.help_text|safe }}</span>{% endif %}
+  {{ field.errors }}
+</div>
+{% endwith %}

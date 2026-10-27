@@ -1,0 +1,6 @@
+# Скрипты и конфиги выполняются в Linux — всегда LF, даже при клонировании на Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.dump binary

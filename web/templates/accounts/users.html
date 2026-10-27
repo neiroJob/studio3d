@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Пользователи{% endblock %}
+{% block heading %}Пользователи{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="row" style="margin-bottom:12px"><span class="muted small">У одного пользователя может быть несколько ролей — права суммируются.</span><span class="spacer"></span><a class="btn pri" href="{% url 'user_create' %}">Добавить пользователя</a></div>
+  <div class="tbl-wrap"><table>
+    <tr><th>Имя</th><th>Логин</th><th>Роли</th><th>Последний вход</th><th></th></tr>
+    {% for u in users %}
+    <tr class="{% if not u.is_active %}off{% endif %}">
+      <td><b>{{ u.first_name|default:"—" }}</b>{% if not u.is_active %} <span class="pill">отключён</span>{% endif %}</td>
+      <td>{{ u.username }}</td>
+      <td>{% for g in u.groups.all %}<span class="pill acc">{{ g.name }}</span> {% empty %}<span class="muted">нет</span>{% endfor %}</td>
+      <td>{{ u.last_login|date:"d.m.Y H:i"|default:"—" }}</td>
+      <td class="num"><a class="btn sm" href="{% url 'user_edit' u.pk %}">Изменить</a> <a class="btn sm" href="{% url 'user_password' u.pk %}">Пароль</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

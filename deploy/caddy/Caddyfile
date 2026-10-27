@@ -1,0 +1,23 @@
+# Единая точка входа: порт 80, только локальная сеть, без HTTPS.
+{
+	admin off
+}
+
+:80 {
+	encode gzip
+
+	handle_path /static/* {
+		root * /srv/static
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	handle {
+		reverse_proxy web:8000
+	}
+}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Роли и права{% endblock %}
+{% block heading %}Роли и права{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="row" style="margin-bottom:12px"><span class="muted small">Роль «Админ» всегда имеет все права. Остальные роли можно настраивать и создавать свои.</span><span class="spacer"></span><a class="btn pri" href="{% url 'role_create' %}">Новая роль</a></div>
+  <div class="tbl-wrap"><table>
+    <tr><th>Роль</th><th>Права</th><th class="num">Пользователей</th><th></th></tr>
+    {% for r in rows %}
+    <tr><td><b>{{ r.group.name }}</b>{% if r.is_base %} <span class="pill">базовая</span>{% endif %}</td>
+      <td class="small">{{ r.rights|join:"; "|default:"—" }}</td>
+      <td class="num">{{ r.group.n_users }}</td>
+      <td class="num"><a class="btn sm" href="{% url 'role_edit' r.group.pk %}">{% if r.group.name == "Админ" %}Открыть{% else %}Изменить{% endif %}</a></td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

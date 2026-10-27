@@ -1,0 +1,23 @@
+# Режим разработки: код монтируется в контейнер, Django перезапускается сам
+# при каждом изменении файла. Не использовать в студии.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Сайт: http://<IP сервера>:8000 (напрямую в Django, с отладкой)
+#       http://<IP сервера>      (через proxy, как в рабочем режиме)
+
+services:
+  web:
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      DEBUG: "1"
+    volumes:
+      - ./web:/app
+      - static:/app/staticfiles
+      - media:/app/media
+      - ./backups:/backups:ro
+    ports:
+      - "8000:8000"
+
+  backup:
+    profiles: ["backup"]

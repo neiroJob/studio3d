@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>{% include "_head.html" %}<title>Первый запуск — Студия 3D</title></head>
+<body>
+<div class="center">
+  <form class="login-card setup-card" method="post" novalidate>
+    {% csrf_token %}
+    {% include "_brand.html" %}
+    <h1>Первый запуск</h1>
+    <p class="muted small">Система ещё не настроена. Создайте администратора и укажите основные данные студии — остальное можно поменять позже в настройках.</p>
+    {{ form.non_field_errors }}
+    <h2>1. Администратор</h2>
+    <div class="form">
+      {% include "_field.html" with field=form.first_name %}
+      {% include "_field.html" with field=form.username %}
+      {% include "_field.html" with field=form.password1 %}
+      {% include "_field.html" with field=form.password2 %}
+    </div>
+    <h2>2. Студия</h2>
+    <div class="form">
+      {% include "_field.html" with field=form.studio_name %}
+      {% include "_field.html" with field=form.timezone %}
+    </div>
+    <h2>3. Электроэнергия</h2>
+    <div class="form">
+      {% include "_field.html" with field=form.price_kwh %}
+    </div>
+    <p class="hint">Тариф нужен для расчёта себестоимости. Новые тарифы добавляются в настройках с датой начала действия — старые расчёты не меняются.</p>
+    <div class="form-actions"><button class="btn pri" type="submit">Завершить настройку</button></div>
+  </form>
+</div>
+</body>
+</html>

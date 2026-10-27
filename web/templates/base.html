@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+{% include "_head.html" %}
+<title>{% block title %}{% endblock %} — {{ studio_name }}</title>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% with url=request.resolver_match.url_name %}
+<div class="app">
+  <aside class="side">
+    {% include "_brand.html" %}
+    <nav class="nav">
+      <a href="{% url 'dashboard' %}" class="{% if url == 'dashboard' %}on{% endif %}">Дашборд</a>
+      {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
+        <div class="nav-group">Администрирование</div>
+      {% endif %}
+      {% if "users_manage" in rights %}
+        <a href="{% url 'users' %}" class="{% if url == 'users' or url == 'user_create' or url == 'user_edit' or url == 'user_password' %}on{% endif %}">Пользователи</a>
+        <a href="{% url 'roles' %}" class="{% if url == 'roles' or url == 'role_create' or url == 'role_edit' %}on{% endif %}">Роли и права</a>
+        <a href="{% url 'journal' %}" class="{% if url == 'journal' %}on{% endif %}">Журнал действий</a>
+      {% endif %}
+      {% if "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
+        <a href="{% url 'settings' %}" class="{% if url == 'settings' %}on{% endif %}">{% if "studio_settings" in rights %}Настройки и тарифы{% else %}Тарифы{% endif %}</a>
+      {% endif %}
+      {% if "studio_settings" in rights %}
+        <a href="{% url 'backups' %}" class="{% if url == 'backups' %}on{% endif %}">Резервные копии</a>
+      {% endif %}
+    </nav>
+    <div class="side-foot">Версия {{ app_version }}</div>
+  </aside>
+  <div class="mainwrap">
+    <header class="top">
+      <button class="icon-btn menu-btn" type="button" data-menu aria-label="Меню">☰</button>
+      <h1>{% block heading %}{% endblock %}</h1>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Тема"></button>
+      <span class="who"><span class="name">{{ user.first_name|default:user.username }} · </span>{% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sm" type="submit">Выйти</button></form>
+    </header>
+    <main>
+      {% if messages %}<div class="msgs">{% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endwith %}
+</body>
+</html>

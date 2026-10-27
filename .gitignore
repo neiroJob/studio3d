@@ -23,3 +23,7 @@ backups/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Django
+web/staticfiles/
+web/db.sqlite3
