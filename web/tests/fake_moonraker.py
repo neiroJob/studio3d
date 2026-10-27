@@ -23,6 +23,7 @@ class FakeMoonraker:
         self.status = json.loads(json.dumps(self.data["status"]))
         self.calls = []
         self.uploads = []
+        self.gcode_files = {}  # путь → bytes, для /server/files/gcodes/<путь>
         self.ws_clients = []
         self.loop = None
         self.port = None
@@ -72,6 +73,20 @@ class FakeMoonraker:
             {"result": {"item": {"path": f.filename}, "print_started": bool(form.get("print"))}}
         )
 
+    async def gcode_file(self, request):
+        data = self.gcode_files.get(request.match_info["path"])
+        if data is None:
+            return web.json_response({"error": {"code": 404, "message": "not found"}}, status=404)
+        rng = request.headers.get("Range", "")
+        if rng.startswith("bytes=-"):
+            part = data[-int(rng[7:]) :]
+        elif rng.startswith("bytes="):
+            start, end = rng[6:].split("-")
+            part = data[int(start) : int(end) + 1 if end else None]
+        else:
+            return web.Response(body=data)
+        return web.Response(body=part, status=206)
+
     # --- WebSocket JSON-RPC ---
 
     async def websocket(self, request):
@@ -109,6 +124,7 @@ class FakeMoonraker:
         app.router.add_get("/server/files/list", self.files_list)
         app.router.add_get("/server/files/metadata", self.metadata)
         app.router.add_post("/server/files/upload", self.upload)
+        app.router.add_get("/server/files/gcodes/{path:.*}", self.gcode_file)
         for name in ("pause", "resume", "cancel", "start"):
             app.router.add_post(f"/printer/print/{name}", self.command)
         app.router.add_get("/websocket", self.websocket)

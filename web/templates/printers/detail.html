@@ -25,12 +25,18 @@
 {% elif tab == "files" %}
 <div class="stack">
   <form class="panel" method="post" enctype="multipart/form-data" action="{% url 'printer_upload' printer.pk %}"
-        data-upload data-progress-url="{% url 'printer_upload_progress' printer.pk 'ID' %}">
+        data-upload data-progress-url="{% url 'printer_upload_progress' printer.pk 'ID' %}"
+        data-check-url="{% url 'printer_check_file' printer.pk %}">
     {% csrf_token %}<h2>Загрузить G-code на принтер</h2>
     <div class="row">
       <input type="file" name="file" accept=".gcode,.gco,.g" required>
       <label class="check"><input type="checkbox" name="start"> Сразу запустить печать</label>
       <span class="spacer"></span><button class="btn pri" type="submit">Загрузить</button>
+    </div>
+    <div class="upload-warn" hidden>
+      <b>Файл может не подойти этому принтеру ({{ profile.title }}):</b>
+      <ul data-warn-list></ul>
+      <div class="row"><button class="btn warn sm" type="button" data-warn-go>Всё равно загрузить</button><button class="btn sm" type="button" data-warn-cancel>Отмена</button></div>
     </div>
     <div class="upload-progress" hidden>
       <div class="row small"><b data-up-stage>Загрузка на сервер</b><span class="spacer"></span><span data-up-text class="muted"></span></div>

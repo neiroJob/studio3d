@@ -9,3 +9,6 @@ select = ["E", "F", "W", "I", "B", "UP", "DJ"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "studio3d.settings"
 python_files = ["tests.py", "test_*.py"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]

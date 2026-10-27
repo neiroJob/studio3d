@@ -16,6 +16,9 @@
     camera.type     mjpeg_snapshot | none
     camera.snapshot_url  адрес снимка, {host} заменяется на IP
     capabilities    что умеет: pause, resume, cancel, start_file, upload
+    tools           число экструдеров (по умолчанию 1)
+    gcode.start_macro   стартовый макрос, который должен быть в начале файла: PRINT_START
+    gcode.model_names   как слайсеры пишут эту модель в «; printer_model = …»
 """
 
 from dataclasses import dataclass, field
@@ -42,6 +45,9 @@ class Profile:
     camera_type: str = "none"
     snapshot_url: str = ""
     capabilities: frozenset = frozenset()
+    start_macro: str = ""
+    model_names: tuple = ()
+    tools: int = 1
 
     @property
     def title(self):
@@ -69,6 +75,7 @@ def parse_profile(data, source="?"):
             raise ProfileError(f"{source}: неизвестные возможности {sorted(unknown)}")
         conn = data.get("connection") or {}
         cam = data.get("camera") or {}
+        gcode = data.get("gcode") or {}
         return Profile(
             id=str(data["id"]),
             manufacturer=str(data["manufacturer"]),
@@ -82,6 +89,9 @@ def parse_profile(data, source="?"):
             camera_type=str(cam.get("type", "none")),
             snapshot_url=str(cam.get("snapshot_url") or ""),
             capabilities=caps,
+            start_macro=str(gcode.get("start_macro") or ""),
+            model_names=tuple(str(n) for n in (gcode.get("model_names") or [])),
+            tools=int(data.get("tools", 1)),
         )
     except KeyError as e:
         raise ProfileError(f"{source}: нет обязательного поля {e}") from e

@@ -16,6 +16,7 @@ from core import audit
 from .drivers import DriverError, base, client_for
 from .drivers.moonraker import fetch_snapshot
 from .forms import PrinterForm, UploadForm
+from .gcode_check import check_gcode, read_head_tail
 from .models import Printer
 from .profiles import get_profile, manufacturers
 from .state import read_state, read_states, view_state
@@ -189,21 +190,54 @@ def _state_blocks_start(printer):
 def start(request, pk):
     printer = get_object_or_404(Printer, pk=pk)
     filename = request.POST.get("filename", "")
+    confirmed = request.POST.get("confirm") == "1"
     blocked = _state_blocks_start(printer)
     if blocked:
         messages.error(request, f"{printer.name}: {blocked}")
     elif not printer.can("start_file") or not filename:
         messages.error(request, "Запуск файла недоступен.")
     else:
+        warnings = []
+        if not confirmed:
+            try:
+                head, tail = client_for(printer).read_head_tail(filename)
+                warnings = check_gcode(head, tail, printer.profile)
+            except DriverError:
+                warnings = []  # не смогли прочитать — не мешаем запуску, Klipper всё равно проверит
+        if warnings:
+            return render(
+                request,
+                "printers/confirm_start.html",
+                {
+                    "printer": printer,
+                    "filename": filename,
+                    "warnings": warnings,
+                },
+            )
         try:
             client_for(printer).start(filename)
         except DriverError as e:
             messages.error(request, f"{printer.name}: {e}")
         else:
-            audit.log(request, audit.Action.PRINT_START, target=printer.name, filename=filename)
+            audit.log(
+                request,
+                audit.Action.PRINT_START,
+                target=printer.name,
+                filename=filename,
+                warnings_confirmed=confirmed,
+            )
             messages.success(request, f"{printer.name}: печать «{filename}» запущена.")
             return redirect("printer_detail", pk=pk)
     return _redirect_back(request, printer)
+
+
+@right_required("print_control")
+@require_POST
+def check_file(request, pk):
+    """Проверка G-code до загрузки: браузер присылает начало и конец файла (head, tail)."""
+    printer = get_object_or_404(Printer, pk=pk)
+    warnings = check_gcode(request.POST.get("head", ""), request.POST.get("tail", ""), printer.profile)
+    return JsonResponse({"warnings": warnings})
 
 
 UPLOAD_ID_RE = re.compile(r"^[a-z0-9]{8,40}$")
@@ -235,7 +269,11 @@ def upload(request, pk):
         f = form.cleaned_data["file"]
         start_now = form.cleaned_data["start"]
         blocked = _state_blocks_start(printer) if start_now else ""
-        if blocked:
+        warnings = check_gcode(*read_head_tail(f), printer.profile)
+        confirmed = request.POST.get("confirm_warnings") == "1"
+        if warnings and not confirmed:
+            messages.error(request, f"{printer.name}: файл не загружен. " + " ".join(warnings))
+        elif blocked:
             messages.error(request, f"{printer.name}: {blocked} Файл не загружен.")
         else:
 
@@ -249,7 +287,12 @@ def upload(request, pk):
                 messages.error(request, f"{printer.name}: {e}")
             else:
                 audit.log(
-                    request, audit.Action.FILE_UPLOAD, target=printer.name, filename=f.name, start=start_now
+                    request,
+                    audit.Action.FILE_UPLOAD,
+                    target=printer.name,
+                    filename=f.name,
+                    start=start_now,
+                    warnings_confirmed=bool(warnings),
                 )
                 text = "загружен и запущен" if start_now else "загружен"
                 messages.success(request, f"{printer.name}: файл «{f.name}» {text}.")

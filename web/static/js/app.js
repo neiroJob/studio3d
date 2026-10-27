@@ -140,13 +140,66 @@
       cancel.hidden = false;
     }
 
+    const warnBox = form.querySelector(".upload-warn");
+    const warnList = form.querySelector("[data-warn-list]");
+    let pendingFile = null;
+
+    function readSlice(blob) {
+      return new Promise(function (resolve) {
+        const r = new FileReader();
+        r.onload = function () { resolve(r.result || ""); };
+        r.onerror = function () { resolve(""); };
+        r.readAsText(blob);
+      });
+    }
+    function precheck(file) {
+      // Проверка G-code до загрузки: начало и конец файла, без отправки всего файла.
+      const head = file.slice(0, 512 * 1024);
+      const tail = file.slice(Math.max(file.size - 128 * 1024, 0));
+      return Promise.all([readSlice(head), readSlice(tail)]).then(function (parts) {
+        const fd = new FormData();
+        fd.append("csrfmiddlewaretoken", form.querySelector("[name=csrfmiddlewaretoken]").value);
+        fd.append("head", parts[0]);
+        fd.append("tail", parts[1]);
+        return fetch(form.dataset.checkUrl, { method: "POST", body: fd, credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { return j.warnings || []; })
+          .catch(function () { return []; });
+      });
+    }
+
     form.addEventListener("submit", function (e) {
       const file = form.querySelector("input[type=file]").files[0];
-      if (!file || !window.XMLHttpRequest || !window.FormData) return; // обычная отправка формы
+      if (!file || !window.XMLHttpRequest || !window.FormData || !window.fetch) return; // обычная отправка формы
       e.preventDefault();
+      warnBox.hidden = true;
+      submit.disabled = true;
+      precheck(file).then(function (warnings) {
+        if (warnings.length) {
+          warnList.innerHTML = "";
+          warnings.forEach(function (w) { const li = document.createElement("li"); li.textContent = w; warnList.appendChild(li); });
+          pendingFile = file;
+          warnBox.hidden = false;
+          submit.disabled = false;
+          return;
+        }
+        upload(file, false);
+      });
+    });
+    form.querySelector("[data-warn-go]").addEventListener("click", function () {
+      warnBox.hidden = true;
+      if (pendingFile) upload(pendingFile, true);
+    });
+    form.querySelector("[data-warn-cancel]").addEventListener("click", function () {
+      warnBox.hidden = true;
+      pendingFile = null;
+    });
+
+    function upload(file, confirmed) {
       const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
       const data = new FormData(form);
       data.append("upload_id", id);
+      if (confirmed) data.append("confirm_warnings", "1");
       xhr = new XMLHttpRequest();
       xhr.open("POST", form.action);
       xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
@@ -186,7 +239,8 @@
         box.hidden = true;
       };
       xhr.send(data);
-    });
+    }
+
     cancel.addEventListener("click", function () { if (xhr) xhr.abort(); });
   }
   document.addEventListener("DOMContentLoaded", function () {

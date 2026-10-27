@@ -25,3 +25,11 @@ camera:
   snapshot_url: "http://{host}:8080/?action=snapshot"
 
 capabilities: [pause, resume, cancel, start_file, upload]
+
+tools: 1
+
+# Проверка G-code перед загрузкой и запуском (см. printers/gcode_check.py).
+# Макрос PRINT_START на принтере паркует оси (G28), греет и строит карту стола — проверено 2026-10-27.
+gcode:
+  start_macro: PRINT_START
+  model_names: ["Qidi Q1 Pro"]

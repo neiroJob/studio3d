@@ -2,7 +2,9 @@
 <div class="panel" style="--c:var({{ s.color }})">
   <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
   {% if s.message %}<div class="msg error" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
-  {% if s.job %}
+  {% if s.job and s.status == "error" %}
+    <dl class="kv"><dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd></dl>
+  {% elif s.job %}
     <div class="bar" style="margin-bottom:12px"><i style="width:{{ s.job.percent }}%"></i></div>
     <dl class="kv">
       <dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd>
@@ -24,6 +26,12 @@
     {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<button class="btn pri">Снял изделие</button></form>{% endif %}
   </div>
 </div>
+{% if s.console %}
+<div class="panel"><h2>Сообщения принтера</h2>
+  <div class="console">{% for line in s.console %}<div class="{% if line|slice:':2' == '!!' or 'Unknown command' in line %}bad{% endif %}">{{ line }}</div>{% endfor %}</div>
+  <p class="hint" style="margin:8px 0 0">Последние ответы Klipper по текущему заданию.</p>
+</div>
+{% endif %}
 <div class="panel"><h2>Температуры, °C</h2>
   {% if s.temps.nozzle %}
   <dl class="kv"><dt>Сопло</dt><dd>{{ s.temps.nozzle.0|floatformat:1 }} / {{ s.temps.nozzle.1|floatformat:0 }}</dd>

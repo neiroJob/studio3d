@@ -6,8 +6,10 @@ API: https://moonraker.readthedocs.io — HTTP для команд и файло
 """
 
 import asyncio
+import collections
 import itertools
 import json
+import re
 import time
 import urllib.parse
 
@@ -282,6 +284,38 @@ class MoonrakerClient(base.BaseClient):
         ]
         return sorted(files, key=lambda f: f["modified"], reverse=True)
 
+    def read_head_tail(self, path):
+        """Начало и конец файла на принтере (для проверки G-code), не скачивая его целиком."""
+        from ..gcode_check import HEAD_BYTES, TAIL_BYTES
+
+        url = self.base_url + "/server/files/gcodes/" + urllib.parse.quote(path)
+        try:
+            with requests.get(
+                url,
+                headers={**self._headers(), "Range": f"bytes=0-{HEAD_BYTES - 1}"},
+                stream=True,
+                timeout=self.timeout,
+            ) as r:
+                if r.status_code not in (200, 206):
+                    raise base.DriverError(f"Не удалось прочитать файл (HTTP {r.status_code})")
+                head = b""
+                for chunk in r.iter_content(64 * 1024):
+                    head += chunk
+                    if len(head) >= HEAD_BYTES:
+                        break
+            tail = b""
+            with requests.get(
+                url,
+                headers={**self._headers(), "Range": f"bytes=-{TAIL_BYTES}"},
+                stream=True,
+                timeout=self.timeout,
+            ) as r:
+                if r.status_code == 206:  # без поддержки Range весь файл не качаем
+                    tail = r.content
+        except requests.RequestException as e:
+            raise base.DriverError("Не удалось прочитать файл с принтера") from e
+        return head[:HEAD_BYTES].decode("utf-8", "replace"), tail.decode("utf-8", "replace")
+
     def file_metadata(self, filename):
         return self.get("/server/files/metadata", filename=filename) or {}
 
@@ -330,6 +364,33 @@ def fetch_snapshot(url, timeout=5):
     return resp.content
 
 
+UNKNOWN_CMD_RE = re.compile(r'Unknown command:\s*"?([^"\s]+)"?', re.IGNORECASE)
+SKIP_RESPONSES = ("ok", "B:", "T:", "// Klipper state")
+
+
+def keep_response(line):
+    """Ответы Klipper, которые стоит показать человеку: ошибки, предупреждения, сообщения макросов."""
+    line = (line or "").strip()
+    return bool(line) and not line.startswith(SKIP_RESPONSES)
+
+
+def decorate(state, console):
+    """Добавить к состоянию последние сообщения принтера и вывод о незнакомых командах."""
+    lines = [c for c in console]
+    state["console"] = lines[-8:]
+    if state.get("status") == base.ERROR:
+        unknown = list(dict.fromkeys(m.group(1) for c in lines for m in [UNKNOWN_CMD_RE.search(c)] if m))
+        if unknown:
+            message = (state.get("message") or "").rstrip()
+            if message and not message.endswith("."):
+                message += "."
+            state["message"] = message + (
+                f" Принтер не знает команд из файла: {', '.join(unknown)} — "
+                "скорее всего, файл нарезан под другой принтер."
+            )
+    return state
+
+
 class MoonrakerMonitor(base.BaseMonitor):
     """Постоянное соединение по WebSocket: подписка на состояние и события истории."""
 
@@ -341,6 +402,7 @@ class MoonrakerMonitor(base.BaseMonitor):
         self._meta_for = None
         self._ids = itertools.count(1)
         self._pending = {}
+        self.console = collections.deque(maxlen=20)
 
     @property
     def http(self):
@@ -416,14 +478,14 @@ class MoonrakerMonitor(base.BaseMonitor):
         server = await self._call(ws, "server.info")
         if server.get("klippy_state") != "ready":
             self.status = {"webhooks": {"state": server.get("klippy_state", "startup"), "state_message": ""}}
-            await on_state(normalize(self.status, profile=self.profile))
+            await on_state(decorate(normalize(self.status, profile=self.profile), self.console))
             return  # дождёмся notify_klippy_ready
         result = await self._call(
             ws, "printer.objects.subscribe", {"objects": subscribe_objects(self.profile)}
         )
         self.status = result.get("status", {})
         await self._refresh_meta()
-        await on_state(normalize(self.status, self.meta, self.profile))
+        await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
 
     async def _reader(self, ws, on_state, on_job):
         import aiohttp
@@ -447,13 +509,20 @@ class MoonrakerMonitor(base.BaseMonitor):
                 for name, diff in params[0].items():
                     self.status.setdefault(name, {}).update(diff)
                 await self._refresh_meta()
-                await on_state(normalize(self.status, self.meta, self.profile))
+                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+            elif method == "notify_gcode_response" and params:
+                for line in str(params[0]).splitlines():
+                    if line.startswith("File opened:"):
+                        self.console.clear()  # новое задание — прошлые сообщения не нужны
+                    if keep_response(line):
+                        self.console.append(line.strip())
+                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
             elif method == "notify_klippy_ready":
                 asyncio.create_task(self._subscribe(ws, on_state))
             elif method in ("notify_klippy_shutdown", "notify_klippy_disconnected"):
                 state = "shutdown" if method.endswith("shutdown") else "startup"
                 self.status.setdefault("webhooks", {})["state"] = state
-                await on_state(normalize(self.status, self.meta, self.profile))
+                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
             elif method == "notify_history_changed" and params:
                 event = params[0]
                 if event.get("action") == "finished" and event.get("job"):
