@@ -41,6 +41,40 @@ def subscribe_objects(profile):
     return objects
 
 
+# Частые ошибки Klipper → пояснение по-русски. Исходный текст сохраняется в скобках.
+KLIPPER_HINTS = [
+    (
+        "Must home axis first",
+        "Оси не в исходном положении: G-code начал движение без парковки (G28). "
+        "Проверьте стартовый G-code / PRINT_START в профиле слайсера",
+    ),
+    (
+        "Move out of range",
+        "Движение за пределы рабочей области: файл нарезан для другого принтера "
+        "или неверно задан стол в слайсере",
+    ),
+    ("Extrude below minimum temp", "Попытка выдавить пластик при холодном сопле"),
+    (
+        "Heater extruder not heating at expected rate",
+        "Сопло не нагревается: проверьте нагреватель и термистор",
+    ),
+    (
+        "Heater heater_bed not heating at expected rate",
+        "Стол не нагревается: проверьте нагреватель и термистор",
+    ),
+    ("Lost communication with MCU", "Потеряна связь с платой принтера"),
+    ("Timer too close", "Плата принтера не успела обработать команды (Timer too close)"),
+]
+
+
+def explain(message):
+    """Добавить пояснение к известной ошибке Klipper."""
+    for needle, hint in KLIPPER_HINTS:
+        if needle.lower() in (message or "").lower():
+            return f"{hint} ({message})"
+    return message
+
+
 def _pair(obj):
     if not isinstance(obj, dict) or obj.get("temperature") is None:
         return None
@@ -67,7 +101,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
     message = ""
     if klippy in ("shutdown", "error"):
         result = base.ERROR
-        message = webhooks.get("state_message") or "Klipper остановлен"
+        message = explain(webhooks.get("state_message") or "Klipper остановлен")
     elif klippy == "startup":
         return {**base.offline_state("Klipper запускается", now), "temps": temps}
     else:
@@ -78,7 +112,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
             "error": base.ERROR,
         }.get(state, base.READY)
         if state == "error":
-            message = stats.get("message") or "Ошибка печати"
+            message = explain(stats.get("message") or "Ошибка печати")
 
     job = None
     if result in (base.PRINTING, base.PAUSED) or (result == base.ERROR and stats.get("filename")):
@@ -127,7 +161,7 @@ def job_from_history(item):
         "print_duration": float(item.get("print_duration") or 0),
         "total_duration": float(item.get("total_duration") or 0),
         "filament_mm": filament_mm,
-        "filament_g": round(grams, 1) if grams is not None else None,
+        "filament_g": round(grams, 2) if grams is not None else None,
     }
 
 
@@ -240,6 +274,11 @@ class MoonrakerClient(base.BaseClient):
                 "modified": float(f.get("modified") or 0),
             }
             for f in items
+        ]
+        # QIDI хранит служебные копии в скрытых папках (.cache — копия при печати с экрана,
+        # .plr — восстановление после отключения питания). Пользователю их не показываем.
+        files = [
+            f for f in files if f["path"] and not any(part.startswith(".") for part in f["path"].split("/"))
         ]
         return sorted(files, key=lambda f: f["modified"], reverse=True)
 

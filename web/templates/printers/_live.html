@@ -5,7 +5,7 @@
   {% if s.job %}
     <div class="bar" style="margin-bottom:12px"><i style="width:{{ s.job.percent }}%"></i></div>
     <dl class="kv">
-      <dt>Файл</dt><dd>{{ s.job.filename }}</dd>
+      <dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd>
       <dt>Прогресс</dt><dd>{{ s.job.percent }} %{% if s.job.layer %}, слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% elif s.job.total_layers %}, слоёв {{ s.job.total_layers }}{% endif %}</dd>
       <dt>Прошло</dt><dd>{{ s.job.elapsed|duration }}</dd>
       <dt>Осталось</dt><dd>{{ s.job.remaining|duration }}</dd>

@@ -377,3 +377,63 @@ def test_snapshot_placeholder_when_camera_unreachable(client):
     resp = client.get(reverse("printer_snapshot", args=[p.pk]))
     assert resp.status_code == 200 and resp["Content-Type"] == "image/svg+xml"
     assert read_state(p.pk) is None
+
+
+# --- запись реального Q1 Pro в простое (tests/fixtures/moonraker_q1pro_idle.json) ---------------
+
+REAL = "moonraker_q1pro_idle.json"
+
+
+def test_real_q1pro_idle_normalize():
+    data = load_fixture(REAL)
+    s = normalize(data["status"], profile=Q1)
+    assert s["status"] == base.READY and s["job"] is None and s["message"] == ""
+    assert s["temps"] == {"nozzle": [27.5, 0.0], "bed": [25.5, 0.0], "chamber": [24.1, 0.0]}
+    # объект камеры из профиля действительно есть у принтера
+    assert Q1.objects["chamber"] in data["objects"]
+    # камера в Moonraker не зарегистрирована — адрес берётся из профиля
+    assert data["webcams"] == {"webcams": []} and Q1.snapshot_url
+
+
+def test_real_q1pro_client():
+    server = FakeMoonraker(REAL).start_thread()
+    try:
+        c = MoonrakerClient("127.0.0.1", server.port, profile=Q1)
+        info = c.check()
+        assert info["moonraker"] == "v0.7.1-609-gbdd0222-dirty"
+        assert info["klipper"] == "v0.10.0-530-g3387a9c2-dirty"
+        assert info["printer_state"] == "standby"
+        assert round(c.history_totals()["print_seconds"] / 3600, 1) == 2506.8
+        # служебные .plr и .cache скрыты
+        paths = [f["path"] for f in c.list_files()]
+        assert paths and not any(p.startswith(".") for p in paths)
+    finally:
+        server.stop_thread()
+
+
+def test_real_q1pro_history_job():
+    item = load_fixture(REAL)["history"][0]
+    job = job_from_history(item)
+    assert job["status"] == "completed" and job["external_id"] == "00007C"
+    assert job["filament_g"] == 83.45 and round(job["print_duration"]) == 32027
+    from printers.templatetags.printers_tags import gcode_name
+
+    assert gcode_name(job["filename"]) == "part-A - 3_9h24m.gcode"
+    assert gcode_name("folder/a.gcode") == "folder/a.gcode"
+
+
+def test_klipper_error_explained():
+    """Реальная ошибка Q1 Pro 2026-10-27 при запуске печати."""
+    st = {
+        "webhooks": {"state": "ready"},
+        "print_stats": {
+            "state": "error",
+            "filename": ".cache/project_2_PETG_4h4m.gcode",
+            "message": "Must home axis first: 0.000 0.000 3.000 [0.000]",
+        },
+        "virtual_sdcard": {"progress": 0.0},
+    }
+    s = normalize(st, profile=Q1)
+    assert s["status"] == base.ERROR
+    assert s["message"].startswith("Оси не в исходном положении") and "Must home axis first" in s["message"]
+    assert s["job"]["filename"] == ".cache/project_2_PETG_4h4m.gcode"

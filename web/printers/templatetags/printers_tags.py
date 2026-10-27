@@ -39,3 +39,14 @@ def unix_date(ts):
     if not ts:
         return "—"
     return timezone.localtime(dt.datetime.fromtimestamp(float(ts), tz=dt.UTC)).strftime("%d.%m.%Y %H:%M")
+
+
+@register.filter
+def gcode_name(path):
+    """«.cache/деталь.gcode» → «деталь.gcode»: служебные скрытые папки QIDI не показываем."""
+    if not path:
+        return ""
+    parts = [p for p in str(path).split("/") if p]
+    while len(parts) > 1 and parts[0].startswith("."):
+        parts.pop(0)
+    return "/".join(parts)
