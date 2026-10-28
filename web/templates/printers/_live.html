@@ -33,10 +33,17 @@
   <p class="hint" style="margin:6px 0 0">Такое бывает, если макрос отмены или завершения на принтере оборвался с ошибкой. Если нагрев включили намеренно, можно не обращать внимания.</p>
 </div>
 {% endif %}
-{% if p.profile.light_object and s.light is not None %}
+{% if p|can:"light" %}
 <div class="panel row" style="padding:12px 16px">
-  <span>Свет в камере: <b>{% if s.light %}включён{% else %}выключен{% endif %}</b></span><span class="spacer"></span>
-  {% if can_control %}<form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}">{% csrf_token %}<button class="btn sm">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>{% endif %}
+  <span>Свет в принтере{% if s.light is not None %}: <b>{% if s.light %}включён{% else %}выключен{% endif %}</b>{% endif %}</span><span class="spacer"></span>
+  {% if can_control %}
+    {% if s.light is not None %}
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}">{% csrf_token %}<button class="btn sm">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>
+    {% else %}
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'on' %}">{% csrf_token %}<button class="btn sm">Включить свет</button></form>
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'off' %}">{% csrf_token %}<button class="btn sm">Выключить свет</button></form>
+    {% endif %}
+  {% endif %}
 </div>
 {% endif %}
 {% if s.console %}

@@ -192,6 +192,17 @@ class _ShortSession:
         return collected
 
 
+def set_light_native(host, port, on, timeout=8):
+    """Включить/выключить свет командой нативного протокола Creality (lightSw).
+
+    Нужно отдельным моделям на Moonraker, которые сами свет через Moonraker не отдают
+    (например, K1C — см. light.native_port в профиле): короткое WS-подключение только
+    ради этой одной команды, тем же протоколом, что у K1 (см. докстринг модуля).
+    """
+    send = {"method": "set", "params": {"lightSw": 1 if on else 0}}
+    asyncio.run(_ShortSession(host, port, timeout).run(send=send))
+
+
 class CrealityNativeClient(base.BaseClient):
     # HTTP (загрузка, превью) всегда на отдельном порту 80, а не на self.port (это порт WebSocket 9999).
     # Атрибут экземпляра, а не модульная константа — тесты подменяют его портом поддельного сервера.

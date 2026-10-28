@@ -14,7 +14,7 @@ from accounts.roles import right_required, user_rights
 from core import audit
 
 from .drivers import DriverError, base, client_for
-from .drivers.moonraker import fetch_snapshot
+from .drivers.moonraker import fetch_snapshot, page_reachable
 from .forms import PrinterForm, UploadForm
 from .gcode_check import check_gcode, read_head_tail
 from .models import Printer
@@ -120,7 +120,7 @@ def live(request, pk):
     )
 
 
-THUMBNAIL_NAME_RE = re.compile(r"^[^/\\]+\.(gcode|gco|g)$", re.IGNORECASE)
+THUMBNAIL_NAME_RE = re.compile(r"^(?!.*\.\.)[^\\]+\.(gcode|gco|g)$", re.IGNORECASE)
 
 
 @right_required("view_dashboard")
@@ -156,6 +156,26 @@ def snapshot(request, pk):
         resp = HttpResponse(image, content_type="image/jpeg")
     resp["Cache-Control"] = "no-store"
     return resp
+
+
+@right_required("view_dashboard")
+def camera_frame(request, pk):
+    """Содержимое фрейма камеры (camera.type: webrtc_iframe) — с тем же «Камера недоступна»,
+
+    что у снимка, если страница принтера не отвечает (сама по себе доступность страницы
+    не гарантирует, что видео на ней покажется, — например, если ICE/STUN не проходит
+    через сеть, — но дальше этого без доступа к внутренней телеметрии принтера не проверить).
+    """
+    printer = get_object_or_404(Printer, pk=pk)
+    url = printer.profile.page_url_for(printer.host) if printer.profile else ""
+    key = f"printer:camera_ok:{pk}"
+    ok = cache.get(key)
+    if ok is None:
+        ok = bool(url) and page_reachable(url, timeout=4)
+        cache.set(key, ok, timeout=10)
+    if not ok:
+        return HttpResponse(NO_SIGNAL_SVG, content_type="image/svg+xml")
+    return redirect(url)
 
 
 # --- команды ----------------------------------------------------------------------------------
@@ -222,6 +242,10 @@ def light(request, pk, mode):
         if state:
             state["light"] = mode == "on"
             write_state(printer.pk, state)
+        # Для моделей без живого статуса света (K1C) живая телеметрия этот кэш почти сразу
+        # перезапишет обратно в «неизвестно» — последняя команда хранится в БД отдельно.
+        printer.light_hint = mode == "on"
+        printer.save(update_fields=["light_hint"])
     return _redirect_back(request, printer)
 
 

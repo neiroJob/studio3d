@@ -284,6 +284,12 @@ class MoonrakerClient(base.BaseClient):
         self.gcode("TURN_OFF_HEATERS")
 
     def set_light(self, on):
+        if self.profile and self.profile.light_native_port:
+            from . import creality_native
+
+            port = self.profile.light_native_port
+            creality_native.set_light_native(self.host, port, on, timeout=self.timeout)
+            return
         if not self.profile or not self.profile.light_on:
             raise base.DriverError("У этой модели нет управления светом")
         self.gcode(self.profile.light_on if on else self.profile.light_off)
@@ -341,6 +347,34 @@ class MoonrakerClient(base.BaseClient):
 
     def file_metadata(self, filename):
         return self.get("/server/files/metadata", filename=filename) or {}
+
+    def thumbnail(self, filename, timeout=5):
+        """Превью модели из метаданных G-code (server/files/metadata → thumbnails[]).
+
+        Слайсер кладёт превью рядом с файлом, в .thumbs/<имя>-<ШxВ>.png (relative_path —
+        относительно папки самого G-code-файла, не относительно корня gcodes).
+        """
+        try:
+            meta = self.file_metadata(filename)
+        except base.DriverError:
+            return None
+        thumbs = meta.get("thumbnails") or []
+        if not thumbs:
+            return None
+        smallest = min(thumbs, key=lambda t: t.get("width") or 0)
+        rel = smallest.get("relative_path") or ""
+        if not rel:
+            return None
+        directory = filename.rsplit("/", 1)[0] if "/" in filename else ""
+        path = f"{directory}/{rel}" if directory else rel
+        url = self.base_url + "/server/files/gcodes/" + urllib.parse.quote(path)
+        try:
+            resp = requests.get(url, headers=self._headers(), timeout=timeout)
+        except requests.RequestException:
+            return None
+        if resp.status_code != 200:
+            return None
+        return resp.content
 
     def upload(self, fileobj, filename, start=False, progress=None):
         """Загрузка G-code. progress(sent, total) вызывается по мере отправки на принтер."""

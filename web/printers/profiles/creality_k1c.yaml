@@ -10,6 +10,10 @@
 #   - управления светом (нет объекта/макроса в printer/objects/list и gcode/help);
 #   - server/webcams/list — 404 (метод не реализован), server/files root "config_examples"/"docs" есть,
 #     но без timelapse/webcam-компонентов.
+# Свет при этом есть — через тот же нативный WebSocket-протокол Creality, что у K1 (порт 9999,
+# доступен параллельно с Moonraker на этой прошивке: {"method":"set","params":{"lightSw":1|0}}).
+# Проверено на реальном принтере: включили (lightSw стало 1), выключили обратно. Состояние света
+# при этом не видно вживую (Moonraker о нём не знает) — кнопка показывает последнюю команду.
 # Камера физически есть и используется (пользователь подтвердил во время печати). Порт 8000
 # отдаёт только HTML-страницу WebRTC (сигналинг через Google STUN) — отдельного endpoint'а
 # под JPEG-снимок нет (проверено: /snapshot, /webcam/snapshot, /?action=snapshot, /jpeg — везде
@@ -39,6 +43,9 @@ camera:
   type: webrtc_iframe
   page_url: "http://{host}:8000"
 
-capabilities: [pause, resume, cancel, start_file, upload]
+capabilities: [pause, resume, cancel, start_file, upload, light]
+
+light:
+  native_port: 9999
 
 tools: 1

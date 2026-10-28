@@ -72,12 +72,36 @@ def test_k1c_profile():
     k1c = get_profile("creality_k1c")
     assert k1c.driver == "moonraker" and k1c.port == 7125 and k1c.verified
     assert k1c.objects["chamber"] == "temperature_sensor chassis"
-    assert {"pause", "resume", "cancel", "start_file", "upload"} <= k1c.capabilities
-    assert "light" not in k1c.capabilities  # нет объекта/макроса света через Moonraker на этой прошивке
+    assert {"pause", "resume", "cancel", "start_file", "upload", "light"} <= k1c.capabilities
+    # Нет объекта/макроса света через Moonraker на этой прошивке — свет идёт отдельной
+    # командой нативного WS-протокола Creality (как у K1), доступного на этом принтере
+    # параллельно с Moonraker (порт 9999). Проверено на реальном принтере (включили/выключили).
+    assert k1c.light_object == "" and k1c.light_native_port == 9999
     # Камера — только страница WebRTC (нет отдельного JPEG-снимка), показывается во фрейме.
     assert k1c.camera_type == "webrtc_iframe"
     assert k1c.snapshot_url_for("10.0.0.7") == ""
     assert k1c.page_url_for("10.0.0.7") == "http://10.0.0.7:8000"
+
+
+def test_k1c_set_light_uses_native_protocol(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "printers.drivers.creality_native.set_light_native",
+        lambda host, port, on, timeout=8: calls.append((host, port, on)),
+    )
+    k1c = get_profile("creality_k1c")
+    c = MoonrakerClient("10.0.0.5", k1c.port, profile=k1c, timeout=3)
+    c.set_light(True)
+    assert calls == [("10.0.0.5", 9999, True)]
+
+
+def test_view_state_uses_light_hint_when_live_status_unknown():
+    p = Printer(name="x", profile_id="creality_k1c", host="h", port=1, light_hint=True)
+    s = view_state(p, {"status": base.READY, "temps": {}, "job": None, "light": None, "updated": time.time()})
+    assert s["light"] is True
+    # Если принтер вживую отдаёт свет — он важнее подсказки.
+    s2 = view_state(p, {"status": base.READY, "temps": {}, "job": None, "light": False, "updated": time.time()})
+    assert s2["light"] is False
 
 
 def test_k1c_check_reports_camera_page_reachable(fake):
@@ -167,6 +191,27 @@ def test_client_check_and_commands(fake):
     assert ("/printer/print/start", {"filename": "cube.gcode"}) in fake.calls
     c.upload(io.BytesIO(b"G28\n"), "test.gcode", start=True)
     assert fake.uploads == [{"filename": "test.gcode", "size": 4, "print": "true"}]
+
+
+def test_client_thumbnail(fake):
+    """Превью модели — из thumbnails[] в метаданных G-code, самое маленькое (список файлов)."""
+    fake.data["metadata"]["thumbnails"] = [
+        {"width": 300, "height": 300, "relative_path": ".thumbs/gear_z24-300x300.png"},
+        {"width": 48, "height": 48, "relative_path": ".thumbs/gear_z24-48x48.png"},
+    ]
+    fake.gcode_files[".thumbs/gear_z24-48x48.png"] = b"\x89PNG\r\n\x1a\nsmall"
+    fake.gcode_files[".thumbs/gear_z24-300x300.png"] = b"\x89PNG\r\n\x1a\nbig"
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=Q1)
+    assert c.thumbnail("gear_z24.gcode") == b"\x89PNG\r\n\x1a\nsmall"
+
+
+def test_client_thumbnail_subdirectory_and_missing(fake):
+    fake.data["metadata"]["thumbnails"] = [{"width": 48, "height": 48, "relative_path": ".thumbs/part-48x48.png"}]
+    fake.gcode_files["sub/.thumbs/part-48x48.png"] = b"\x89PNG\r\n\x1a\nnested"
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=Q1)
+    assert c.thumbnail("sub/part.gcode") == b"\x89PNG\r\n\x1a\nnested"
+    fake.data["metadata"]["thumbnails"] = []
+    assert c.thumbnail("sub/part.gcode") is None
 
 
 def test_query_encodes_object_names(fake):
@@ -401,6 +446,25 @@ def test_snapshot_placeholder_when_camera_unreachable(client):
     resp = client.get(reverse("printer_snapshot", args=[p.pk]))
     assert resp.status_code == 200 and resp["Content-Type"] == "image/svg+xml"
     assert read_state(p.pk) is None
+
+
+@pytest.mark.django_db
+def test_camera_frame_placeholder_when_page_unreachable(client):
+    make_user("anna", ROLE_MANAGER)
+    p = make_printer(profile_id="creality_k1c", host="127.0.0.1", port=7125)
+    login(client, "anna")
+    resp = client.get(reverse("printer_camera_frame", args=[p.pk]))
+    assert resp.status_code == 200 and resp["Content-Type"] == "image/svg+xml"
+
+
+@pytest.mark.django_db
+def test_camera_frame_redirects_when_page_reachable(client, monkeypatch):
+    make_user("anna", ROLE_MANAGER)
+    p = make_printer(profile_id="creality_k1c", host="10.0.0.9", port=7125)
+    login(client, "anna")
+    monkeypatch.setattr("printers.views.page_reachable", lambda url, timeout=5: True)
+    resp = client.get(reverse("printer_camera_frame", args=[p.pk]))
+    assert resp.status_code == 302 and resp["Location"] == "http://10.0.0.9:8000"
 
 
 # --- запись реального Q1 Pro в простое (tests/fixtures/moonraker_q1pro_idle.json) ---------------
@@ -680,7 +744,7 @@ def test_light_toggle(client, fake):
     )
     login(client, "sergey")
     html = client.get(reverse("printer_live", args=[p.pk])).content.decode()
-    assert "Свет в камере: <b>выключен</b>" in html and "Включить свет" in html
+    assert "Свет в принтере: <b>выключен</b>" in html and "Включить свет" in html
     client.post(reverse("printer_light", args=[p.pk, "on"]))
     assert ("/printer/gcode/script", {"script": "SET_PIN PIN=caselight VALUE=1"}) in fake.calls
     assert read_state(p.pk)["light"] is True

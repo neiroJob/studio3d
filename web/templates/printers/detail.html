@@ -15,7 +15,7 @@
 {% if tab == "now" %}
 <div class="g32">
   <div class="stack">
-    <div class="cam">{% if profile.camera_type == "mjpeg_snapshot" and profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% elif profile.camera_type == "webrtc_iframe" and camera_page_url %}<iframe src="{{ camera_page_url }}" title="Камера" allow="autoplay"></iframe><span class="live">Камера · страница принтера</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
+    <div class="cam">{% if profile.camera_type == "mjpeg_snapshot" and profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% elif profile.camera_type == "webrtc_iframe" and camera_page_url %}<iframe src="{% url 'printer_camera_frame' printer.pk %}" title="Камера" allow="autoplay"></iframe><span class="live">Камера · страница принтера</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
   </div>
   <div class="stack" hx-get="{% url 'printer_live' printer.pk %}" hx-trigger="every 3s" hx-swap="innerHTML">
     {% include "printers/_live.html" %}
@@ -52,9 +52,9 @@
     {% if files_error %}<div class="msg error">{{ files_error }}</div>{% else %}
     {% if printer|can:"start_file" and state.status != "ready" %}<div class="note">Запуск доступен, когда принтер в статусе «Готов». Сейчас: {{ state.label|lower }}.</div>{% endif %}
     <div class="tbl-wrap"><table>
-      <tr>{% if profile.driver == "creality_native" %}<th></th>{% endif %}<th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
+      <tr><th></th><th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
       {% for f in files %}<tr>
-        {% if profile.driver == "creality_native" %}<td><img class="file-thumb" src="{% url 'printer_file_thumbnail' printer.pk f.path|basename %}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></td>{% endif %}
+        <td><img class="file-thumb" src="{% url 'printer_file_thumbnail' printer.pk f.path %}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></td>
         <td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
         <td class="num">{% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
       {% empty %}<tr><td colspan="5" class="muted">Файлов нет</td></tr>{% endfor %}

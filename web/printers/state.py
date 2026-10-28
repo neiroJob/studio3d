@@ -62,6 +62,10 @@ def view_state(printer, state=None):
         job["percent"] = round(float(job.get("progress") or 0) * 100)
         total_g = job.get("filament_g_total")
         job["filament_g_now"] = round(total_g * job["progress"]) if total_g else None
+    # Модели без живого статуса света (K1C: свет только отдельной командой, не в телеметрии) —
+    # последняя отправленная команда, пока принтер не скажет точнее.
+    if state.get("light") is None and printer.light_hint is not None:
+        state["light"] = printer.light_hint
     return state
 
 

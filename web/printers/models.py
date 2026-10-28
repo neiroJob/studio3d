@@ -31,6 +31,10 @@ class Printer(models.Model):
     last_seen_at = models.DateTimeField("Последний ответ", null=True, blank=True)
 
     awaiting_removal = models.BooleanField("Ждёт снятия изделия", default=False)
+    # Для моделей, которые не сообщают состояние света в живой телеметрии (например, K1C:
+    # свет только через нативный WebSocket, отдельно от Moonraker) — последняя команда,
+    # чтобы кнопка показывала состояние, а не терялась при каждом обновлении состояния.
+    light_hint = models.BooleanField("Свет включён (последняя команда)", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

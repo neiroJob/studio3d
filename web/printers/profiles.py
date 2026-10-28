@@ -23,6 +23,11 @@
     light.object    объект Klipper с состоянием света (поле value > 0 — включён)
     light.on_gcode / light.off_gcode  G-code включения и выключения света
                     (не «on/off»: в YAML это читается как true/false)
+    light.native_port  вместо object/on_gcode/off_gcode — свет не через Klipper/Moonraker,
+                    а короткой командой нативного WebSocket-протокола Creality (lightSw)
+                    на этот порт того же хоста (у K1C свет не виден через Moonraker,
+                    только так). Состояние света при этом не известно вживую — показывается
+                    последняя отправленная команда (Printer.light_hint)
     tools           число экструдеров (по умолчанию 1)
     gcode.start_macro   стартовый макрос, который должен быть в начале файла: PRINT_START
     gcode.model_names   как слайсеры пишут эту модель в «; printer_model = …»
@@ -56,6 +61,7 @@ class Profile:
     light_object: str = ""
     light_on: str = ""
     light_off: str = ""
+    light_native_port: int | None = None
     start_macro: str = ""
     model_names: tuple = ()
     tools: int = 1
@@ -91,10 +97,13 @@ def parse_profile(data, source="?"):
         cam = data.get("camera") or {}
         gcode = data.get("gcode") or {}
         light = data.get("light") or {}
-        if "light" in caps and not (light.get("object") and light.get("on_gcode") and light.get("off_gcode")):
-            raise ProfileError(
-                f"{source}: для возможности light нужны light.object, light.on_gcode и light.off_gcode"
-            )
+        light_native_port = light.get("native_port")
+        if "light" in caps and not light_native_port:
+            if not (light.get("object") and light.get("on_gcode") and light.get("off_gcode")):
+                raise ProfileError(
+                    f"{source}: для возможности light нужны light.native_port, "
+                    "либо light.object, light.on_gcode и light.off_gcode"
+                )
         return Profile(
             id=str(data["id"]),
             manufacturer=str(data["manufacturer"]),
@@ -112,6 +121,7 @@ def parse_profile(data, source="?"):
             light_object=str(light.get("object") or ""),
             light_on=str(light.get("on_gcode") or ""),
             light_off=str(light.get("off_gcode") or ""),
+            light_native_port=int(light_native_port) if light_native_port else None,
             start_macro=str(gcode.get("start_macro") or ""),
             model_names=tuple(str(n) for n in (gcode.get("model_names") or [])),
             tools=int(data.get("tools", 1)),

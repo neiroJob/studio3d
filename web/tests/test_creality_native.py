@@ -350,7 +350,8 @@ def test_files_tab_shows_thumbnails_and_print_button(client, fake):
     login(client, "sergey")
     html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
     assert "project_2_PETG_4h4m.gcode" in html and "Печать" in html
-    assert reverse("printer_file_thumbnail", args=[p.pk, "project_2_PETG_4h4m.gcode"]) in html
+    full_path = "/usr/data/printer_data/gcodes/project_2_PETG_4h4m.gcode"
+    assert reverse("printer_file_thumbnail", args=[p.pk, full_path]) in html
 
 
 @pytest.mark.django_db(transaction=True)

@@ -26,7 +26,7 @@
         {% if s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'resume' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm">Продолжить</button></form>{% endif %}
       {% endif %}
       {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm pri">Снял изделие</button></form>{% endif %}
-      {% if "print_control" in rights and p.profile.light_object and s.light is not None %}<form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm" title="Свет в камере">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>{% endif %}
+      {% if "print_control" in rights and p|can:"light" %}{% if s.light is not None %}<form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm" title="Свет в принтере">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>{% else %}<form class="inline" method="post" action="{% url 'printer_light' p.pk 'on' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ back }}"><button class="btn sm" title="Свет в принтере">Включить свет</button></form>{% endif %}{% endif %}
       {% if s.status == "ready" and "print_control" in rights %}<a class="btn sm pri" href="{% url 'printer_detail' p.pk %}?tab=files">Поставить на печать</a>{% endif %}
     </div>
   </div>
