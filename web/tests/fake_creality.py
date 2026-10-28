@@ -23,6 +23,8 @@ class FakeCreality:
         self.state = load_fixture(fixture)
         self.gcode_files = load_fixture("creality_k1_gcode_files.json")
         self.received = []  # params из каждой команды set/get
+        self.uploads = []  # [{"filename": str, "size": int}]
+        self.thumbnails = {}  # имя превью (например, "a.png") -> bytes
         self.ws_clients = []
         self.loop = None
         self.port = None
@@ -49,6 +51,31 @@ class FakeCreality:
                 await ws.send_str(json.dumps({"retGcodeFileInfo2": self.gcode_files}))
         return ws
 
+    async def upload(self, request):
+        name = request.match_info["name"]
+        reader = await request.multipart()
+        field = await reader.next()
+        data = await field.read()
+        self.uploads.append({"filename": name, "size": len(data)})
+        entry = {
+            "custom_types": 1,
+            "type": 8,
+            "name": name,
+            "path": f"/usr/data/printer_data/gcodes/{name}",
+            "file_size": len(data),
+            "create_time": 1793176692,
+            "filamentWeight": "",
+        }
+        self.gcode_files = [e for e in self.gcode_files if e.get("name") != name] + [entry]
+        return web.json_response({"code": 200, "message": "OK"})
+
+    async def thumbnail(self, request):
+        name = request.match_info["name"]
+        data = self.thumbnails.get(name)
+        if data is None:
+            return web.Response(status=404)
+        return web.Response(body=data, content_type="image/png")
+
     async def close_clients(self):
         for ws in self.ws_clients:
             await ws.close()
@@ -62,6 +89,8 @@ class FakeCreality:
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.websocket)
+        app.router.add_post("/upload/{name}", self.upload)
+        app.router.add_get("/downloads/humbnail/{name}", self.thumbnail)
         return app
 
     async def start_async(self):

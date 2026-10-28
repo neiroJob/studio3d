@@ -47,6 +47,11 @@ def can(printer, capability):
 
 
 @register.filter
+def basename(path):
+    return str(path or "").rsplit("/", 1)[-1]
+
+
+@register.filter
 def gcode_name(path):
     """«.cache/деталь.gcode» → «деталь.gcode»: служебные скрытые папки QIDI не показываем."""
     if not path:

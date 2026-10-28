@@ -3,7 +3,9 @@
 import asyncio
 
 import pytest
+from django.urls import reverse
 
+from accounts.roles import ROLE_OPERATOR
 from printers.drivers import base
 from printers.drivers.creality_native import (
     CrealityNativeClient,
@@ -12,9 +14,11 @@ from printers.drivers.creality_native import (
     normalize,
     parse_firmware,
 )
+from printers.models import Printer
 from printers.profiles import get_profile
 
 from .fake_creality import FakeCreality, load_fixture
+from .test_printers import login, make_user
 
 K1 = get_profile("creality_k1")
 IDLE = load_fixture("creality_k1_idle.json")
@@ -27,13 +31,21 @@ def fake():
     server.stop_thread()
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 # --- профиль ------------------------------------------------------------------------------
 
 
 def test_k1_profile():
     assert K1.driver == "creality_native" and K1.port == 9999 and K1.verified
-    assert K1.capabilities == {"pause", "resume", "cancel", "light"}
-    assert not K1.can("start_file") and not K1.can("upload")
+    assert K1.capabilities == {"pause", "resume", "cancel", "light", "start_file", "upload"}
 
 
 # --- разбор версии прошивки --------------------------------------------------------------
@@ -148,6 +160,48 @@ def test_client_list_files(fake):
     assert files[0]["size"] == 10364876 and files[0]["modified"] == 1792916389
 
 
+def test_client_read_head_tail_unsupported(fake):
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    with pytest.raises(base.DriverError, match="не поддерживается"):
+        c.read_head_tail("a.gcode")
+
+
+def test_client_start(fake):
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    c.start("/usr/data/printer_data/gcodes/a.gcode")
+    assert ("set", {"opGcodeFile": "printprt:/usr/data/printer_data/gcodes/a.gcode"}) in fake.received
+
+
+def test_client_upload(fake):
+    import io
+
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    c.upload_port = fake.port
+    sent = []
+    c.upload(io.BytesIO(b"G28\n"), "test.gcode", progress=lambda s, t: sent.append((s, t)))
+    assert fake.uploads == [{"filename": "test.gcode", "size": 4}]
+    assert sent and sent[-1][0] == sent[-1][1]  # последний вызов — «отправлено всё»
+
+
+def test_client_upload_and_start(fake):
+    import io
+
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    c.upload_port = fake.port
+    c.upload(io.BytesIO(b"G28\n"), "test.gcode", start=True)
+    assert fake.uploads == [{"filename": "test.gcode", "size": 4}]
+    started = [p for m, p in fake.received if m == "set" and "opGcodeFile" in p]
+    assert started == [{"opGcodeFile": "printprt:/usr/data/printer_data/gcodes/test.gcode"}]
+
+
+def test_client_thumbnail(fake):
+    fake.thumbnails["a.png"] = b"\x89PNG\r\n\x1a\nfake"
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    c.upload_port = fake.port
+    assert c.thumbnail("a.gcode") == b"\x89PNG\r\n\x1a\nfake"
+    assert c.thumbnail("missing.gcode") is None
+
+
 # --- монитор (постоянное WebSocket-соединение) ----------------------------------------------
 
 
@@ -197,3 +251,44 @@ def test_monitor_tracks_job_completion():
     printing = [s for s in states if s["status"] == base.PRINTING]
     assert printing and printing[-1]["job"]["progress"] == 0.35
     assert jobs == [("completed", True, 1400.0)]
+
+
+# --- веб: вкладка «Файлы» и превью -----------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_files_tab_shows_thumbnails_and_print_button(client, fake):
+    import time
+
+    from printers.drivers import base
+    from printers.state import write_state
+
+    make_user("sergey", ROLE_OPERATOR)
+    p = Printer.objects.create(name="K1-01", profile_id="creality_k1", host="127.0.0.1", port=fake.port)
+    write_state(p.pk, {"status": base.READY, "temps": {}, "job": None, "updated": time.time()})
+    login(client, "sergey")
+    html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
+    assert "project_2_PETG_4h4m.gcode" in html and "Печать" in html
+    assert reverse("printer_file_thumbnail", args=[p.pk, "project_2_PETG_4h4m.gcode"]) in html
+
+
+@pytest.mark.django_db(transaction=True)
+def test_file_thumbnail_view(client, fake):
+    fake.thumbnails["project_2_PETG_4h4m.png"] = b"\x89PNG\r\n\x1a\nfake"
+    make_user("sergey", ROLE_OPERATOR)
+    p = Printer.objects.create(name="K1-01", profile_id="creality_k1", host="127.0.0.1", port=fake.port)
+    login(client, "sergey")
+    # client_for() использует порт из Printer (fake.port) для WS, но HTTP у этого драйвера
+    # всегда на upload_port (в проде — 80); на поддельном сервере оба на одном порту, поэтому
+    # подменяем upload_port там, где его читает код запроса, — через monkeypatch класса.
+    from printers.drivers.creality_native import CrealityNativeClient
+
+    CrealityNativeClient.upload_port = fake.port
+    try:
+        resp = client.get(reverse("printer_file_thumbnail", args=[p.pk, "project_2_PETG_4h4m.gcode"]))
+        assert resp.status_code == 200 and resp["Content-Type"] == "image/png"
+        assert resp.content == b"\x89PNG\r\n\x1a\nfake"
+        missing = client.get(reverse("printer_file_thumbnail", args=[p.pk, "missing.gcode"]))
+        assert missing.status_code == 404
+    finally:
+        CrealityNativeClient.upload_port = 80

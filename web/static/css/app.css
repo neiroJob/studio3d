@@ -91,6 +91,7 @@ th{font-weight:500;color:var(--ink3);text-align:left;font-size:13px;padding:8px 
 td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
 td.num,th.num{text-align:right}
 tr.off td{color:var(--ink3)}
+.file-thumb{width:36px;height:36px;border-radius:6px;background:var(--cam-bg);object-fit:contain;display:block}
 .pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap;margin:1px 0}
 .pill.acc{background:var(--accent-soft);border-color:transparent}
 .pager{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px}

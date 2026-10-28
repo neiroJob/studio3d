@@ -1,7 +1,8 @@
 # Профиль модели. Справочник полей — web/printers/profiles.py.
 # Проверено на реальном принтере 2026-10-28: WebSocket 9999 (нет Moonraker, порт 7125 закрыт),
-# прошивка DWIN sw ver:1.3.5.22. Команды pause/resume/stop/lightSw отправлены и подтверждены
-# ответом принтера. Протокол — драйвер creality_native, подробности там же в докстринге.
+# прошивка DWIN sw ver:1.3.5.22. Команды pause/resume/stop/lightSw и загрузка/удаление файла
+# отправлены и подтверждены ответом принтера. Запуск печати (printprt:) взят из собственного
+# JS принтера, но не запускался «вживую». Протокол — драйвер creality_native, докстринг там же.
 id: creality_k1
 manufacturer: Creality
 model: K1
@@ -20,11 +21,7 @@ build_volume_mm: [220, 220, 250]
 camera:
   type: none
 
-# start_file и upload не заявлены: подтверждённой команды запуска/загрузки файла в протоколе
-# пока нет (не входит в протокол, по которому собран драйвер — см. ha_creality_ws, он их не делает).
-# list_files в драйвере есть и показывает файлы на принтере, но запустить печать можно будет,
-# когда команда найдётся и будет проверена на принтере.
-capabilities: [pause, resume, cancel, light]
+capabilities: [pause, resume, cancel, light, start_file, upload]
 
 light:
   object: lightSw

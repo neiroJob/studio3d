@@ -4,11 +4,15 @@
 Принтер сам, без запроса, шлёт частичные обновления состояния сразу после подключения.
 
 Протокол не документирован Creality. Поля и команды собраны по записи реального K1 (память проекта,
-printers.md) и по открытому проекту-интеграции Home Assistant для принтеров Creality
-(github.com/3dg1luk43/ha_creality_ws, const.py/ws_client.py/coordinator.py/utils.py) — там же разобрана
-карта кодов `state`/`deviceState`/`err`. Команды pause/resume/stop/lightSw проверены на живом K1
-(2026-10-28, прошивка 1.3.5.22). Нет подтверждённой команды запуска файла с принтера и загрузки файла —
-поэтому `start_file` и `upload` в профиле K1 не заявлены.
+printers.md), по открытому проекту-интеграции Home Assistant для принтеров Creality
+(github.com/3dg1luk43/ha_creality_ws, const.py/ws_client.py/coordinator.py/utils.py) — там разобрана
+карта кодов `state`/`deviceState`/`err` — и напрямую из собственного веб-интерфейса принтера (JS-бандл
+отдаётся самим принтером на порту 80: `opGcodeFile` с префиксами `printprt:`/`deleteprt:`, загрузка
+`POST /upload/<имя>` и превью `GET /downloads/humbnail/<имя>.png` — это оттуда). Пауза/продолжение/
+отмена/свет/запрос файлов проверены на живом K1; загрузка и удаление файла — проверены полным циклом
+(загружен тестовый файл, найден в списке, удалён, список подтвердил исчезновение), 2026-10-28,
+прошивка 1.3.5.22. Запуск печати (`printprt:`) не проверен «вживую» — команда взята из прошивки
+принтера, но саму печать на проверяемом принтере не запускали.
 """
 
 import asyncio
@@ -16,7 +20,30 @@ import json
 import re
 import time
 
+import requests
+
 from . import base
+
+UPLOAD_PORT = 80
+GCODE_EXT_RE = re.compile(r"\.(gcode|gco|g)$", re.IGNORECASE)
+
+
+def thumb_name(gcode_filename):
+    """«деталь.gcode» → «деталь.png»: так принтер называет файл превью."""
+    base_name = (gcode_filename or "").rsplit("/", 1)[-1]
+    return GCODE_EXT_RE.sub(".png", base_name)
+
+
+def fetch_thumbnail(host, gcode_filename, port=UPLOAD_PORT, timeout=5):
+    """PNG-превью модели или None. GET http://{host}:80/downloads/humbnail/{имя}.png."""
+    url = f"http://{host}:{port}/downloads/humbnail/{thumb_name(gcode_filename)}"
+    try:
+        resp = requests.get(url, timeout=timeout)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200 or not resp.headers.get("Content-Type", "").startswith("image/"):
+        return None
+    return resp.content
 
 SUBPROTOCOL_HINT = None  # принтер отвечает и без Sec-WebSocket-Protocol: wsslicer
 
@@ -129,7 +156,7 @@ class _ShortSession:
                         msg = await asyncio.wait_for(
                             ws.receive(), timeout=max(deadline - asyncio.get_event_loop().time(), 0.1)
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         break
                     if msg.type != aiohttp.WSMsgType.TEXT:
                         break
@@ -157,6 +184,10 @@ class _ShortSession:
 
 
 class CrealityNativeClient(base.BaseClient):
+    # HTTP (загрузка, превью) всегда на отдельном порту 80, а не на self.port (это порт WebSocket 9999).
+    # Атрибут экземпляра, а не модульная константа — тесты подменяют его портом поддельного сервера.
+    upload_port = UPLOAD_PORT
+
     def _session(self):
         return _ShortSession(self.host, self.port, self.timeout)
 
@@ -227,6 +258,69 @@ class CrealityNativeClient(base.BaseClient):
             if isinstance(e, dict) and (e.get("path") or e.get("name"))
         ]
         return sorted(files, key=lambda f: f["modified"], reverse=True)
+
+    def read_head_tail(self, path):
+        """Нет команды чтения содержимого файла с принтера — проверка G-code перед запуском недоступна."""
+        raise base.DriverError("Чтение файла с принтера не поддерживается у этой модели")
+
+    def start(self, filename):
+        """filename — полный путь на принтере, как его отдаёт list_files() (поле path)."""
+        self._set(opGcodeFile=f"printprt:{filename}")
+
+    def thumbnail(self, gcode_filename, timeout=5):
+        return fetch_thumbnail(self.host, gcode_filename, port=self.upload_port, timeout=timeout)
+
+    def upload(self, fileobj, filename, start=False, progress=None):
+        """POST http://{host}:80/upload/{имя} (multipart, поле file). progress(sent, total) по ходу отправки.
+
+        После успешной загрузки принтер сам не запускает печать — start=True делает это отдельной
+        командой `printprt:`, для которой сначала нужен полный путь файла (запрашиваем reqGcodeFile,
+        как это делает сам принтер после загрузки).
+        """
+        from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncoderMonitor
+
+        encoder = MultipartEncoder(fields={"file": (filename, fileobj, "application/octet-stream")})
+        total = encoder.len
+        last = [0.0]
+
+        def callback(monitor):
+            now = time.monotonic()
+            if progress and (now - last[0] > 0.3 or monitor.bytes_read >= total):
+                last[0] = now
+                progress(monitor.bytes_read, total)
+
+        body = MultipartEncoderMonitor(encoder, callback)
+        url = f"http://{self.host}:{self.upload_port}/upload/{filename}"
+        try:
+            resp = requests.post(
+                url, data=body, headers={"Content-Type": body.content_type}, timeout=(self.timeout, 600)
+            )
+        except requests.Timeout as e:
+            raise base.DriverError("Принтер не ответил вовремя при загрузке файла") from e
+        except requests.ConnectionError as e:
+            raise base.DriverError("Связь с принтером прервалась при загрузке файла") from e
+        if resp.status_code >= 400:
+            raise base.DriverError(f"Принтер не принял файл (HTTP {resp.status_code})")
+        try:
+            ok = resp.json().get("code") == 200
+        except ValueError:
+            ok = resp.status_code == 200
+        if not ok:
+            raise base.DriverError("Принтер не принял файл")
+
+        if start:
+            data = self._run(
+                self._session().run(
+                    send={"method": "get", "params": {"reqGcodeFile": 1}},
+                    wait_for="retGcodeFileInfo2",
+                    drain=0,
+                )
+            )
+            entries = data.get("retGcodeFileInfo2") or []
+            entry = next((e for e in entries if isinstance(e, dict) and e.get("name") == filename), None)
+            if entry is None:
+                raise base.DriverError("Файл загружен, но принтер не нашёл его в списке для запуска")
+            self.start(entry["path"])
 
 
 class CrealityNativeMonitor(base.BaseMonitor):

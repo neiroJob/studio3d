@@ -52,10 +52,12 @@
     {% if files_error %}<div class="msg error">{{ files_error }}</div>{% else %}
     {% if printer|can:"start_file" and state.status != "ready" %}<div class="note">Запуск доступен, когда принтер в статусе «Готов». Сейчас: {{ state.label|lower }}.</div>{% endif %}
     <div class="tbl-wrap"><table>
-      <tr><th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
-      {% for f in files %}<tr><td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
+      <tr>{% if profile.driver == "creality_native" %}<th></th>{% endif %}<th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
+      {% for f in files %}<tr>
+        {% if profile.driver == "creality_native" %}<td><img class="file-thumb" src="{% url 'printer_file_thumbnail' printer.pk f.path|basename %}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></td>{% endif %}
+        <td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
         <td class="num">{% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
-      {% empty %}<tr><td colspan="4" class="muted">Файлов нет</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="5" class="muted">Файлов нет</td></tr>{% endfor %}
     </table></div>{% endif %}
   </div>
 </div>

@@ -4,7 +4,7 @@ import time
 
 from django.contrib import messages
 from django.core.cache import cache
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -117,6 +117,27 @@ def live(request, pk):
             "can_control": "print_control" in user_rights(request.user),
         },
     )
+
+
+THUMBNAIL_NAME_RE = re.compile(r"^[^/\\]+\.(gcode|gco|g)$", re.IGNORECASE)
+
+
+@right_required("view_dashboard")
+def file_thumbnail(request, pk, name):
+    printer = get_object_or_404(Printer, pk=pk)
+    thumbnail = getattr(client_for(printer), "thumbnail", None) if printer.profile else None
+    if thumbnail is None or not THUMBNAIL_NAME_RE.match(name):
+        raise Http404
+    key = f"printer:thumb:{pk}:{name}"
+    image = cache.get(key)
+    if image is None:
+        image = thumbnail(name) or b""
+        cache.set(key, image, timeout=300)
+    if not image:
+        raise Http404
+    resp = HttpResponse(image, content_type="image/png")
+    resp["Cache-Control"] = "private, max-age=300"
+    return resp
 
 
 @right_required("view_dashboard")

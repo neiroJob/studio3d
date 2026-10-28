@@ -9,6 +9,7 @@ urlpatterns = [
     path("printers/<int:pk>/", views.detail, name="printer_detail"),
     path("printers/<int:pk>/live/", views.live, name="printer_live"),
     path("printers/<int:pk>/snapshot.jpg", views.snapshot, name="printer_snapshot"),
+    path("printers/<int:pk>/files/thumb/<str:name>", views.file_thumbnail, name="printer_file_thumbnail"),
     path("printers/<int:pk>/edit/", views.edit, name="printer_edit"),
     path("printers/<int:pk>/delete/", views.delete, name="printer_delete"),
     path("printers/<int:pk>/start/", views.start, name="printer_start"),
