@@ -1,0 +1,47 @@
+[
+  {
+    "custom_types": 1,
+    "type": 8,
+    "name": "project_2_PETG_4h4m.gcode",
+    "path": "/usr/data/printer_data/gcodes/project_2_PETG_4h4m.gcode",
+    "file_size": 10364876,
+    "create_time": 1792916389,
+    "timeCost": 14644,
+    "consumables": 25474,
+    "material": "PETG",
+    "software": "OrcaSlicer",
+    "materialColors": "#808040",
+    "materialIds": "GFG99",
+    "filamentWeight": "77.82"
+  },
+  {
+    "custom_types": 1,
+    "type": 8,
+    "name": "project_crealityK1_1_PETG_4h10m.gcode",
+    "path": "/usr/data/printer_data/gcodes/project_crealityK1_1_PETG_4h10m.gcode",
+    "file_size": 10572545,
+    "create_time": 1792914533,
+    "timeCost": 14998,
+    "consumables": 25608,
+    "material": "PETG",
+    "software": "OrcaSlicer",
+    "materialColors": "#808040",
+    "materialIds": "GFG99",
+    "filamentWeight": "78.23"
+  },
+  {
+    "custom_types": 1,
+    "type": 8,
+    "name": "stackable_PETG_8h27m.gcode",
+    "path": "/usr/data/printer_data/gcodes/stackable_PETG_8h27m.gcode",
+    "file_size": 20302175,
+    "create_time": 1789025627,
+    "timeCost": 30447,
+    "consumables": 56553,
+    "material": "PETG",
+    "software": "OrcaSlicer",
+    "materialColors": "#26A69A",
+    "materialIds": "GFG99",
+    "filamentWeight": "172.75"
+  }
+]

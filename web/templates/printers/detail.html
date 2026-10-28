@@ -24,6 +24,7 @@
 
 {% elif tab == "files" %}
 <div class="stack">
+  {% if printer|can:"upload" %}
   <form class="panel" method="post" enctype="multipart/form-data" action="{% url 'printer_upload' printer.pk %}"
         data-upload data-progress-url="{% url 'printer_upload_progress' printer.pk 'ID' %}"
         data-check-url="{% url 'printer_check_file' printer.pk %}">
@@ -45,14 +46,15 @@
     </div>
     <p class="hint" style="margin:8px 0 0">Файл уходит в папку gcodes принтера. Перед запуском проверьте, что стол пуст.</p>
   </form>
+  {% endif %}
   <div class="panel">
     <h2>Файлы на принтере</h2>
     {% if files_error %}<div class="msg error">{{ files_error }}</div>{% else %}
-    {% if state.status != "ready" %}<div class="note">Запуск доступен, когда принтер в статусе «Готов». Сейчас: {{ state.label|lower }}.</div>{% endif %}
+    {% if printer|can:"start_file" and state.status != "ready" %}<div class="note">Запуск доступен, когда принтер в статусе «Готов». Сейчас: {{ state.label|lower }}.</div>{% endif %}
     <div class="tbl-wrap"><table>
       <tr><th>Файл</th><th class="num">Размер</th><th>Изменён</th><th></th></tr>
       {% for f in files %}<tr><td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
-        <td class="num">{% if state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
+        <td class="num">{% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
       {% empty %}<tr><td colspan="4" class="muted">Файлов нет</td></tr>{% endfor %}
     </table></div>{% endif %}
   </div>

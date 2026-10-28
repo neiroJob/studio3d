@@ -1,10 +1,11 @@
 """Реестр драйверов. Новый протокол = новый модуль с Client и Monitor (ТЗ, расширения уровня «драйвер»)."""
 
-from . import moonraker
+from . import creality_native, moonraker
 from .base import DriverError  # noqa: F401
 
 DRIVERS = {
     "moonraker": (moonraker.MoonrakerClient, moonraker.MoonrakerMonitor),
+    "creality_native": (creality_native.CrealityNativeClient, creality_native.CrealityNativeMonitor),
 }
 
 

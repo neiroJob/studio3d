@@ -42,6 +42,11 @@ def unix_date(ts):
 
 
 @register.filter
+def can(printer, capability):
+    return printer.can(capability)
+
+
+@register.filter
 def gcode_name(path):
     """«.cache/деталь.gcode» → «деталь.gcode»: служебные скрытые папки QIDI не показываем."""
     if not path:

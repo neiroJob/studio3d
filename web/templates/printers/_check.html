@@ -4,9 +4,9 @@
 <div class="result ok"{% if hours is not None %} data-fill-hours="{{ hours|stringformat:'s' }}"{% endif %}>
   <b>Связь есть.</b> Ответ за {{ result.latency_ms }} мс.
   <dl class="kv" style="margin-top:8px">
-    <dt>Moonraker</dt><dd>{{ result.moonraker }}</dd>
-    {% if result.klipper %}<dt>Klipper</dt><dd>{{ result.klipper }}</dd>{% endif %}
-    <dt>Состояние</dt><dd>{% if result.klippy_state == "ready" %}Klipper готов{% else %}Klipper: {{ result.klippy_state }}{% endif %}{% if result.printer_state %}, печать: {{ result.printer_state }}{% endif %}</dd>
+    {% if result.moonraker %}<dt>Moonraker</dt><dd>{{ result.moonraker }}</dd>{% elif result.protocol %}<dt>Протокол</dt><dd>{{ result.protocol }}</dd>{% endif %}
+    {% if result.klipper %}<dt>Прошивка</dt><dd>{{ result.klipper }}</dd>{% endif %}
+    <dt>Состояние</dt><dd>{% if result.klippy_state == "ready" %}Klipper готов{% elif result.klippy_state %}Klipper: {{ result.klippy_state }}{% endif %}{% if result.printer_state %}{% if result.klippy_state %}, {% endif %}печать: {{ result.printer_state }}{% endif %}</dd>
     <dt>Камера</dt><dd>{% if result.camera %}{% if result.camera_ok %}найдена{% else %}не отвечает{% endif %} <span class="muted small">(из профиля модели)</span>{% else %}нет в профиле{% endif %}</dd>
     <dt>Наработка по истории</dt><dd>{% if hours is not None %}{{ hours }} ч печати — подставлено в поле ниже{% else %}история недоступна{% endif %}</dd>
   </dl>
