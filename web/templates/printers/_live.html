@@ -10,7 +10,7 @@
       <dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd>
       <dt>Прогресс</dt><dd>{{ s.job.percent }} %{% if s.job.layer %}, слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% elif s.job.total_layers %}, слоёв {{ s.job.total_layers }}{% endif %}</dd>
       <dt>Прошло</dt><dd>{{ s.job.elapsed|duration }}</dd>
-      <dt>Осталось</dt><dd>{{ s.job.remaining|duration }}</dd>
+      <dt>Осталось</dt><dd>{{ s.job.remaining|duration }}{% if s.job.remaining is not None %} — закончится в {{ s.job.remaining|eta }}{% endif %}</dd>
       <dt>Пластик</dt><dd>{% if s.job.filament_g_total %}≈ {{ s.job.filament_g_now }} из {{ s.job.filament_g_total|floatformat:0 }} г (по G-code){% else %}{{ s.job.filament_mm|floatformat:0 }} мм{% endif %}</dd>
     </dl>
   {% elif s.status == "finished" %}<p style="margin:0">Печать завершена. Снимите изделие со стола и отметьте это.</p>

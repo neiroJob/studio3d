@@ -13,7 +13,7 @@
       <div class="meta" style="color:var(--st-err)">{{ s.message|truncatechars:160 }}</div>
       {% if s.job %}<div class="meta">{{ s.job.filename|gcode_name }}</div>{% endif %}
     {% elif s.job %}
-      <div class="big">{{ s.job.percent }} %<small>{% if s.job.remaining is not None %}осталось {{ s.job.remaining|duration }}{% endif %}</small></div>
+      <div class="big">{{ s.job.percent }} %<small>{% if s.job.remaining is not None %}осталось {{ s.job.remaining|duration }} · до {{ s.job.remaining|eta }}{% endif %}</small></div>
       <div class="bar" style="margin-top:6px"><i style="width:{{ s.job.percent }}%"></i></div>
       <div class="meta">{{ s.job.filename|gcode_name }}{% if s.job.layer %}<br>слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% endif %}</div>
     {% elif s.status == "finished" %}

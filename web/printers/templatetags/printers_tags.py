@@ -42,6 +42,19 @@ def unix_date(ts):
 
 
 @register.filter
+def eta(remaining_seconds):
+    """Секунды до конца печати → часы в часовом поясе студии: 5400 → «16:30»."""
+    if remaining_seconds is None:
+        return "—"
+    import datetime as dt
+
+    from django.utils import timezone
+
+    finish = timezone.now() + dt.timedelta(seconds=float(remaining_seconds))
+    return timezone.localtime(finish).strftime("%H:%M")
+
+
+@register.filter
 def can(printer, capability):
     return printer.can(capability)
 

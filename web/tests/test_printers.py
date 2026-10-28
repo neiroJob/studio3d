@@ -424,6 +424,18 @@ def test_real_q1pro_history_job():
     assert gcode_name("folder/a.gcode") == "folder/a.gcode"
 
 
+def test_eta_filter():
+    from django.utils import timezone
+
+    from printers.templatetags.printers_tags import eta
+
+    assert eta(None) == "—"
+    now_hm = timezone.localtime(timezone.now()).strftime("%H:%M")
+    assert eta(0) == now_hm  # «осталось 0» — печать заканчивается прямо сейчас
+    future = timezone.localtime(timezone.now() + timezone.timedelta(hours=1)).strftime("%H:%M")
+    assert eta(3600) == future
+
+
 def test_klipper_error_explained():
     """Реальная ошибка Q1 Pro 2026-10-27 при запуске печати."""
     st = {
