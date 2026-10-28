@@ -15,7 +15,7 @@
 {% if tab == "now" %}
 <div class="g32">
   <div class="stack">
-    <div class="cam">{% if profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
+    <div class="cam">{% if profile.camera_type == "mjpeg_snapshot" and profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% elif profile.camera_type == "webrtc_iframe" and camera_page_url %}<iframe src="{{ camera_page_url }}" title="Камера" allow="autoplay"></iframe><span class="live">Камера · страница принтера</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
   </div>
   <div class="stack" hx-get="{% url 'printer_live' printer.pk %}" hx-trigger="every 3s" hx-swap="innerHTML">
     {% include "printers/_live.html" %}

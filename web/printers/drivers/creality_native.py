@@ -107,8 +107,17 @@ def normalize(data, profile=None, connected=True, now=None):
     if status in (base.PRINTING, base.PAUSED):
         progress = max(_float(data.get("printProgress")), 0) / 100
         elapsed = _float(data.get("printJobTime"))
-        remaining = data.get("printLeftTime")
         meta = data.get("_gcode_meta") or {}
+        # Сразу после запуска принтер ещё не посчитал printLeftTime (отдаёт 0 или прошлое
+        # значение) — пока идёт печать меньше минуты, точнее оценка слайсера (timeCost
+        # из reqGcodeFile) минус прошедшее время. Как только printLeftTime оживёт, он
+        # точнее (учитывает реальную скорость), поэтому используется по умолчанию.
+        raw_remaining = data.get("printLeftTime")
+        time_cost = meta.get("timeCost")
+        if (raw_remaining is None or _float(raw_remaining) <= 0) and time_cost:
+            remaining = max(_float(time_cost) - elapsed, 0)
+        else:
+            remaining = raw_remaining
         job = {
             "filename": data.get("printFileName") or "",
             "progress": round(progress, 4),
@@ -366,6 +375,7 @@ class CrealityNativeMonitor(base.BaseMonitor):
                 if entries is not None:
                     self.handle_retgcodefile(entries, self.data.get("printFileName") or "")
                 await self._refresh_gcode_meta(ws)
+                self._snapshot_job()
                 state = normalize({**self.data, "_gcode_meta": self._gcode_meta}, self.profile)
                 await self._track_job(state, on_job)
                 await on_state(state)
@@ -382,6 +392,26 @@ class CrealityNativeMonitor(base.BaseMonitor):
         except Exception:  # noqa: BLE001 — метаданные необязательны
             pass
 
+    def _snapshot_job(self):
+        """Запомнить последние показания активного задания — из сырых данных принтера,
+
+        до normalize()/derive_status(). Кадр, где печать физически доходит до 100%,
+        сам по себе уже переводит статус в «готов» (см. derive_status) — отдельного
+        кадра «задание ещё активно, прогресс 100» не бывает, в построенный job он не
+        попадает. А на реальном принтере тот же кадр, где пропадает printFileName,
+        может одновременно сбросить printProgress/printJobTime/usedMaterialLength
+        в 0 — поэтому значения берутся здесь, пока printFileName совпадает с заданием,
+        и не уменьшаются (max), а не из кадра, где задание уже пропало.
+        """
+        if not self._job or self.data.get("printFileName") != self._job["filename"]:
+            return
+        progress = max(_float(self.data.get("printProgress")), 0) / 100
+        elapsed = _float(self.data.get("printJobTime"))
+        filament_mm = _float(self.data.get("usedMaterialLength"))
+        self._job["last_progress"] = max(self._job.get("last_progress", 0.0), progress)
+        self._job["last_elapsed"] = max(self._job.get("last_elapsed", 0.0), elapsed)
+        self._job["last_filament_mm"] = max(self._job.get("last_filament_mm", 0.0), filament_mm)
+
     async def _track_job(self, state, on_job):
         job = state.get("job")
         if job and job["filename"]:
@@ -392,13 +422,14 @@ class CrealityNativeMonitor(base.BaseMonitor):
                     "filename": job["filename"],
                     "start_time": self.data.get("printStartTime") or time.time(),
                 }
+                self._snapshot_job()
             return
         if self._job is None:
             return
         # Задание было активным и перестало им быть — печать закончилась (сами или отменой).
         ended = self._job
         self._job = None
-        progress = _float(self.data.get("printProgress")) / 100
+        progress = ended.get("last_progress", 0.0)
         status, _ = derive_status(self.data)
         await on_job(
             {
@@ -407,9 +438,9 @@ class CrealityNativeMonitor(base.BaseMonitor):
                 "status": "completed" if progress >= 0.999 and status != base.ERROR else "cancelled",
                 "start_time": ended["start_time"],
                 "end_time": time.time(),
-                "print_duration": _float(self.data.get("printJobTime")),
-                "total_duration": _float(self.data.get("printJobTime")),
-                "filament_mm": _float(self.data.get("usedMaterialLength")),
+                "print_duration": ended.get("last_elapsed", 0.0),
+                "total_duration": ended.get("last_elapsed", 0.0),
+                "filament_mm": ended.get("last_filament_mm", 0.0),
                 "filament_g": self._gcode_meta.get("filamentWeight"),
             },
             live=True,
@@ -423,5 +454,9 @@ class CrealityNativeMonitor(base.BaseMonitor):
                 continue
             if e.get("path") == filename or e.get("name") == base_name:
                 weight = e.get("filamentWeight")
-                self._gcode_meta = {"filamentWeight": float(weight) if weight not in (None, "") else None}
+                time_cost = e.get("timeCost")
+                self._gcode_meta = {
+                    "filamentWeight": float(weight) if weight not in (None, "") else None,
+                    "timeCost": float(time_cost) if time_cost not in (None, "") else None,
+                }
                 return

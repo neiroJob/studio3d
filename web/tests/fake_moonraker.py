@@ -134,7 +134,12 @@ class FakeMoonraker:
             app.router.add_post(f"/printer/print/{name}", self.command)
         app.router.add_post("/printer/gcode/script", self.command)
         app.router.add_get("/websocket", self.websocket)
+        app.router.add_get("/webrtc_page", self.webrtc_page)
         return app
+
+    async def webrtc_page(self, request):
+        """Заглушка страницы камеры K1C: порт 8000 отдаёт HTML независимо от пути."""
+        return web.Response(text="<html><body>webrtc</body></html>", content_type="text/html")
 
     # --- запуск в отдельном потоке (для синхронных тестов) ---
 

@@ -88,6 +88,7 @@ def detail(request, pk):
         "state": view_state(printer, read_state(printer.pk)),
         "tab": tab,
         "web_ui": printer.profile.web_ui_for(printer.host) if printer.profile else "",
+        "camera_page_url": printer.profile.page_url_for(printer.host) if printer.profile else "",
         "can_control": "print_control" in rights,
     }
     if tab == "files":
@@ -385,7 +386,7 @@ def _profiles_json():
                     "model": p.model,
                     "port": p.port,
                     "power_w": p.power_w,
-                    "camera": bool(p.snapshot_url),
+                    "camera": bool(p.snapshot_url or p.page_url),
                     "verified": p.verified,
                 }
                 for p in items

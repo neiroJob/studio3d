@@ -67,6 +67,28 @@ def test_q1_pro_profile():
     assert {"pause", "resume", "cancel", "start_file", "upload"} <= Q1.capabilities
 
 
+def test_k1c_profile():
+    """Проверено на двух реальных принтерах K1C 2025 (nexusp Moonraker v0.1.1), 2026-10-28."""
+    k1c = get_profile("creality_k1c")
+    assert k1c.driver == "moonraker" and k1c.port == 7125 and k1c.verified
+    assert k1c.objects["chamber"] == "temperature_sensor chassis"
+    assert {"pause", "resume", "cancel", "start_file", "upload"} <= k1c.capabilities
+    assert "light" not in k1c.capabilities  # нет объекта/макроса света через Moonraker на этой прошивке
+    # Камера — только страница WebRTC (нет отдельного JPEG-снимка), показывается во фрейме.
+    assert k1c.camera_type == "webrtc_iframe"
+    assert k1c.snapshot_url_for("10.0.0.7") == ""
+    assert k1c.page_url_for("10.0.0.7") == "http://10.0.0.7:8000"
+
+
+def test_k1c_check_reports_camera_page_reachable(fake):
+    import dataclasses
+
+    k1c = dataclasses.replace(get_profile("creality_k1c"), page_url="http://{host}:" + str(fake.port) + "/webrtc_page")
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=k1c, timeout=5)
+    info = c.check()
+    assert info["camera"] == f"http://127.0.0.1:{fake.port}/webrtc_page" and info["camera_ok"] is True
+
+
 # --- нормализация состояния -------------------------------------------------------------------
 
 

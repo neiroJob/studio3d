@@ -1,0 +1,44 @@
+# Профиль модели. Справочник полей — web/printers/profiles.py.
+# Проверено на двух реальных принтерах 2026-10-28 (К1C ревизии 2025, прошивка с Moonraker
+# в сборке nexusp v0.1.1): /server/info, /printer/info (hostname K1C-F4FD, K1C-EDE4),
+# printer/objects/query (print_stats, virtual_sdcard, extruder, heater_bed), server/history/totals,
+# server/files/metadata (estimated_time, layer_count, filament_total, filament_weight_total).
+# Драйвер — тот же moonraker, что у QIDI (docstring driver/moonraker.py уже называет K1C 2025).
+#
+# Чего нет на этой прошивке через Moonraker (7125), см. память проекта printers.md:
+#   - слой печати (print_stats.info.current_layer/total_layer — null даже во время печати);
+#   - управления светом (нет объекта/макроса в printer/objects/list и gcode/help);
+#   - server/webcams/list — 404 (метод не реализован), server/files root "config_examples"/"docs" есть,
+#     но без timelapse/webcam-компонентов.
+# Камера физически есть и используется (пользователь подтвердил во время печати). Порт 8000
+# отдаёт только HTML-страницу WebRTC (сигналинг через Google STUN) — отдельного endpoint'а
+# под JPEG-снимок нет (проверено: /snapshot, /webcam/snapshot, /?action=snapshot, /jpeg — везде
+# одна и та же страница, HTTP 200 text/html). Отдельный протокол WebRTC на сервере не
+# реализован — вместо этого страница принтера показывается во фрейме на странице принтера
+# (camera.type: webrtc_iframe). Миниатюры на плитке дашборда и таймлапса для такой камеры нет —
+# это чужая страница, а не снимок.
+id: creality_k1c
+manufacturer: Creality
+model: K1C (2025)
+driver: moonraker
+verified: true
+
+connection:
+  port: 7125
+
+power_w: null
+
+build_volume_mm: [220, 220, 250]
+
+# У этой прошивки нет heater_generic для камеры — только датчик без цели (температура камеры
+# показывается, целевая всегда 0).
+objects:
+  chamber: "temperature_sensor chassis"
+
+camera:
+  type: webrtc_iframe
+  page_url: "http://{host}:8000"
+
+capabilities: [pause, resume, cancel, start_file, upload]
+
+tools: 1

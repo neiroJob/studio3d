@@ -241,9 +241,13 @@ class MoonrakerClient(base.BaseClient):
             except base.DriverError:
                 pass
         snap = self.profile.snapshot_url_for(self.host) if self.profile else ""
+        page = self.profile.page_url_for(self.host) if self.profile else ""
         if snap:
             result["camera"] = snap
             result["camera_ok"] = fetch_snapshot(snap, timeout=4) is not None
+        elif page:
+            result["camera"] = page
+            result["camera_ok"] = page_reachable(page, timeout=4)
         return result
 
     def query(self, objects):
@@ -381,6 +385,16 @@ def fetch_snapshot(url, timeout=5):
     if resp.status_code != 200 or not resp.headers.get("Content-Type", "").startswith("image/"):
         return None
     return resp.content
+
+
+def page_reachable(url, timeout=5):
+    """Страница камеры (например, WebRTC) отвечает, не скачивая её целиком."""
+    try:
+        resp = requests.get(url, timeout=timeout, stream=True)
+        resp.close()
+    except requests.RequestException:
+        return False
+    return resp.status_code == 200
 
 
 UNKNOWN_CMD_RE = re.compile(r'Unknown command:\s*"?([^"\s]+)"?', re.IGNORECASE)

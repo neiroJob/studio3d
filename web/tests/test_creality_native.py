@@ -114,6 +114,31 @@ def test_normalize_printing_job():
     assert job["filament_mm"] == 1250.5 and job["filament_g_total"] == 42.7
 
 
+def test_normalize_remaining_falls_back_to_slicer_estimate():
+    """Сразу после запуска printLeftTime у принтера ещё 0 (не успел посчитать) — ПО-27418,
+
+    пока нет данных «вживую», берём оценку слайсера (timeCost) минус прошедшее время,
+    а не показываем «осталось 0» (эта ошибка показывалась как «осталось 0 мин — закончится
+    сейчас» сразу после нажатия «Печать»).
+    """
+    data = dict(
+        IDLE,
+        printFileName="a.gcode",
+        printProgress=1,
+        state=1,
+        printJobTime=30,
+        printLeftTime=0,
+        _gcode_meta={"timeCost": 14644},
+    )
+    s = normalize(data, K1)
+    assert s["job"]["remaining"] == 14644 - 30
+
+    # Как только принтер сам посчитал остаток, он точнее оценки слайсера — используем его.
+    live = dict(data, printLeftTime=9000)
+    s_live = normalize(live, K1)
+    assert s_live["job"]["remaining"] == 9000
+
+
 # --- клиент (короткие WS-подключения) -----------------------------------------------------
 
 
@@ -251,6 +276,62 @@ def test_monitor_tracks_job_completion():
     printing = [s for s in states if s["status"] == base.PRINTING]
     assert printing and printing[-1]["job"]["progress"] == 0.35
     assert jobs == [("completed", True, 1400.0)]
+
+
+def test_monitor_job_completed_despite_telemetry_reset_on_finish():
+    """Принтер может обнулить printJobTime/usedMaterialLength в том же кадре, где прогресс
+
+    доходит до 100 (готовится к следующему заданию) — ещё до того, как пропадёт
+    printFileName. Раньше это писало в историю время печати и расход «0», из-за чего
+    наработка не росла. Берём максимум по ходу печати, а не значения из кадра обнуления.
+    """
+
+    async def scenario():
+        import aiohttp
+
+        fake = FakeCreality()
+        await fake.start_async()
+        states, jobs = [], []
+
+        async def on_state(s):
+            states.append(s)
+
+        async def on_job(j, live):
+            jobs.append((j["status"], live, j["print_duration"], j["filament_mm"]))
+
+        async with aiohttp.ClientSession() as session:
+            mon = CrealityNativeMonitor("127.0.0.1", fake.port, profile=K1, session=session)
+            task = asyncio.create_task(mon.run(on_state, on_job))
+            for _ in range(50):
+                if states:
+                    break
+                await asyncio.sleep(0.05)
+            await fake.push(
+                {
+                    "printFileName": "a.gcode",
+                    "printStartTime": 1000,
+                    "state": 1,
+                    "printProgress": 90,
+                    "printJobTime": 6500,
+                    "usedMaterialLength": 1300.0,
+                }
+            )
+            await asyncio.sleep(0.1)
+            # Прогресс доходит до 100 (printFileName пока не пропал), но принтер в этом же
+            # кадре уже обнулил счётчики времени и расхода — готовится к следующему заданию.
+            await fake.push({"printProgress": 100, "printJobTime": 0, "usedMaterialLength": 0.0})
+            await asyncio.sleep(0.1)
+            # Следом принтер уходит в простой — новых заданий это уже не должно создавать.
+            await fake.push({"printFileName": "", "printProgress": 0, "state": 0})
+            await asyncio.sleep(0.2)
+            await fake.close_clients()
+            with pytest.raises(Exception):  # noqa: B017 — обрыв соединения приводит к исключению
+                await asyncio.wait_for(task, 3)
+        await fake.stop_async()
+        return jobs
+
+    jobs = asyncio.run(scenario())
+    assert jobs == [("completed", True, 6500.0, 1300.0)]
 
 
 # --- веб: вкладка «Файлы» и превью -----------------------------------------------------------

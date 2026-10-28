@@ -13,8 +13,12 @@
     connection.web_ui  адрес родного веб-интерфейса, {host} заменяется на IP
     power_w         паспортная мощность, Вт, или null
     objects.chamber имя объекта Klipper с температурой камеры, или нет поля
-    camera.type     mjpeg_snapshot | none
-    camera.snapshot_url  адрес снимка, {host} заменяется на IP
+    camera.type     mjpeg_snapshot | webrtc_iframe | none
+    camera.snapshot_url  адрес снимка (для mjpeg_snapshot), {host} заменяется на IP
+    camera.page_url      адрес страницы со встроенным видео (для webrtc_iframe) — когда
+                    принтер отдаёт только WebRTC-страницу без отдельного снимка, она
+                    показывается во фрейме на странице принтера (без миниатюры на плитке
+                    дашборда и без записи в таймлапс — это не снимок, а чужая страница)
     capabilities    что умеет: pause, resume, cancel, start_file, upload, light
     light.object    объект Klipper с состоянием света (поле value > 0 — включён)
     light.on_gcode / light.off_gcode  G-code включения и выключения света
@@ -47,6 +51,7 @@ class Profile:
     objects: dict = field(default_factory=dict)
     camera_type: str = "none"
     snapshot_url: str = ""
+    page_url: str = ""
     capabilities: frozenset = frozenset()
     light_object: str = ""
     light_on: str = ""
@@ -67,6 +72,9 @@ class Profile:
 
     def snapshot_url_for(self, host):
         return self.snapshot_url.format(host=host) if self.snapshot_url else ""
+
+    def page_url_for(self, host):
+        return self.page_url.format(host=host) if self.page_url else ""
 
 
 class ProfileError(ValueError):
@@ -99,6 +107,7 @@ def parse_profile(data, source="?"):
             objects=dict(data.get("objects") or {}),
             camera_type=str(cam.get("type", "none")),
             snapshot_url=str(cam.get("snapshot_url") or ""),
+            page_url=str(cam.get("page_url") or ""),
             capabilities=caps,
             light_object=str(light.get("object") or ""),
             light_on=str(light.get("on_gcode") or ""),
