@@ -153,7 +153,7 @@ tr.off td{color:var(--ink3)}
 .bar i{display:block;height:100%;background:var(--c,var(--st-print))}
 .cam{background:var(--cam-bg);border-radius:8px;aspect-ratio:4/3;position:relative;overflow:hidden}
 .cam img{width:100%;height:100%;object-fit:contain;display:block}
-.cam iframe{width:100%;height:100%;border:0;display:block}
+.cam iframe{width:100%;height:100%;border:0;display:block;overflow:hidden}
 .cam .live{position:absolute;left:10px;top:10px;font-size:12px;color:#fff;background:rgba(0,0,0,.45);padding:2px 8px;border-radius:5px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px;margin:0}
 .kv dt{color:var(--ink3)}

@@ -282,6 +282,53 @@ def test_monitor_subscribe_updates_and_history():
     assert "heater_generic chamber" in subscribed and "print_stats" in subscribed
 
 
+def test_monitor_catches_up_history_without_notification():
+    """Некоторые сборки Moonraker (встречалось на изменённой прошивке QIDI) не шлют
+    notify_history_changed — задание не должно теряться, если печать просто перестала быть активной."""
+
+    async def scenario():
+        import aiohttp
+
+        fake = FakeMoonraker()
+        await fake.start_async()
+        fake.data["history"].append(
+            {
+                "job_id": "LIVE1",
+                "filename": "gear.gcode",
+                "status": "completed",
+                "start_time": time.time() - 100,
+                "end_time": time.time() - 1,
+                "print_duration": 99.0,
+            }
+        )
+        jobs = []
+
+        async def on_state(s):
+            pass
+
+        async def on_job(j, live):
+            jobs.append((j["external_id"], live))
+
+        async with aiohttp.ClientSession() as session:
+            mon = MoonrakerMonitor("127.0.0.1", fake.port, profile=Q1, session=session)
+            task = asyncio.create_task(mon.run(on_state, on_job, history_since=1e12))
+            for _ in range(50):
+                if mon.status:
+                    break
+                await asyncio.sleep(0.05)
+            # печать закончилась, но notify_history_changed принтер не прислал
+            await fake.notify("notify_status_update", [{"print_stats": {"state": "complete"}}, 2.0])
+            await asyncio.sleep(1.5)
+            await fake.close_clients()
+            with pytest.raises(Exception):  # noqa: B017 — обрыв соединения приводит к исключению
+                await asyncio.wait_for(task, 3)
+        await fake.stop_async()
+        return jobs
+
+    jobs = asyncio.run(scenario())
+    assert ("LIVE1", True) in jobs
+
+
 # --- коллектор: задания и наработка -----------------------------------------------------------
 
 
@@ -308,6 +355,54 @@ def test_collector_save_job_and_awaiting_removal():
     async_to_sync(collector.add_on_seconds)(printer.pk, 65)
     printer.refresh_from_db()
     assert printer.on_seconds == 65 and printer.last_seen_at is not None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_collector_recovers_job_lost_in_connection_gap():
+    """У K1 нет истории на самом принтере: если соединение обрывается прямо во время печати,
+    монитор пересоздаётся с нуля и теряет отслеживание задания в памяти (lessonslearned № 15/
+    текущий баг — «Ждёт снятия» и история не работали после реального обрыва). Коллектор должен
+    закрыть такое задание сам, по последним показаниям перед обрывом."""
+    printer = make_printer(name="K1-gap", profile_id="creality_k1")
+    worker = collector.PrinterWorker(printer, session=None)
+    gap_state = {
+        "status": base.PRINTING,
+        "job": {"filename": "part.gcode", "progress": 0.87, "elapsed": 1200.0, "filament_mm": 500.0},
+        "updated": time.time() - 1200,
+    }
+    worker.pending_job_check = gap_state  # имитирует ветку except в loop() после обрыва связи
+
+    async_to_sync(worker.on_state)({"status": base.READY, "job": None, "updated": time.time()})
+    job = PrintJob.objects.get(printer=printer)
+    assert job.status == "interrupted" and round(job.print_duration) == 1200
+    assert printer.awaiting_removal is False  # прогресс не дотянул до 100% — не «успех»
+    assert worker.pending_job_check is None
+
+    # полный прогресс в последнем известном кадре — считаем успешным завершением
+    printer2 = make_printer(name="K1-gap-2", profile_id="creality_k1")
+    worker2 = collector.PrinterWorker(printer2, session=None)
+    worker2.pending_job_check = {
+        "status": base.PRINTING,
+        "job": {"filename": "done.gcode", "progress": 1.0, "elapsed": 600.0, "filament_mm": 20.0},
+        "updated": time.time() - 5,
+    }
+    async_to_sync(worker2.on_state)({"status": base.READY, "job": None, "updated": time.time()})
+    printer2.refresh_from_db()
+    job2 = PrintJob.objects.get(printer=printer2)
+    assert job2.status == "completed" and printer2.awaiting_removal is True
+
+    # если после переподключения то же задание продолжается — ничего не закрываем
+    printer3 = make_printer(name="K1-gap-3", profile_id="creality_k1")
+    worker3 = collector.PrinterWorker(printer3, session=None)
+    worker3.pending_job_check = {
+        "status": base.PRINTING,
+        "job": {"filename": "continuing.gcode", "progress": 0.5, "elapsed": 300.0},
+        "updated": time.time() - 2,
+    }
+    async_to_sync(worker3.on_state)(
+        {"status": base.PRINTING, "job": {"filename": "continuing.gcode", "progress": 0.52}, "updated": time.time()}
+    )
+    assert PrintJob.objects.filter(printer=printer3).count() == 0
 
 
 # --- веб: права, добавление, команды ----------------------------------------------------------

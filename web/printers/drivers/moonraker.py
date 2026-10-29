@@ -470,6 +470,7 @@ class MoonrakerMonitor(base.BaseMonitor):
         self._ids = itertools.count(1)
         self._pending = {}
         self.console = collections.deque(maxlen=20)
+        self._catchup_tasks = set()
 
     @property
     def http(self):
@@ -537,6 +538,9 @@ class MoonrakerMonitor(base.BaseMonitor):
                 for fut in self._pending.values():
                     fut.cancel()
                 self._pending.clear()
+                for task in self._catchup_tasks:
+                    task.cancel()
+                self._catchup_tasks.clear()
             if ws.exception():
                 raise ws.exception()
         raise aiohttp.ClientConnectionError("Соединение закрыто принтером")
@@ -573,10 +577,13 @@ class MoonrakerMonitor(base.BaseMonitor):
             method = data.get("method")
             params = data.get("params") or []
             if method == "notify_status_update" and params:
+                was_active = self._job_active()
                 for name, diff in params[0].items():
                     self.status.setdefault(name, {}).update(diff)
                 await self._refresh_meta()
                 await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+                if was_active and not self._job_active():
+                    self._spawn_catchup(on_job)
             elif method == "notify_gcode_response" and params:
                 for line in str(params[0]).splitlines():
                     if line.startswith("File opened:"):
@@ -594,3 +601,27 @@ class MoonrakerMonitor(base.BaseMonitor):
                 event = params[0]
                 if event.get("action") == "finished" and event.get("job"):
                     await on_job(job_from_history(event["job"]), live=True)
+
+    def _job_active(self):
+        return (self.status.get("print_stats") or {}).get("state") in ("printing", "paused")
+
+    def _spawn_catchup(self, on_job):
+        task = asyncio.create_task(self._catch_up_history(on_job))
+        self._catchup_tasks.add(task)
+        task.add_done_callback(self._catchup_tasks.discard)
+
+    async def _catch_up_history(self, on_job):
+        """`notify_history_changed` не гарантирован на всех сборках Moonraker (встречалось на
+        изменённой прошивке QIDI) — если печать перестала быть активной, но уведомление не пришло,
+        подтягиваем завершённое задание прямым запросом истории."""
+        since = time.time() - 60
+        for _ in range(5):
+            await asyncio.sleep(1)
+            try:
+                jobs = await self.history_since(since)
+            except Exception:  # noqa: BLE001 — временная ошибка связи, попробуем ещё раз
+                continue
+            if jobs:
+                for job in jobs:
+                    await on_job(job_from_history(job), live=True)
+                return

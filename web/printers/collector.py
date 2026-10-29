@@ -83,6 +83,12 @@ def clear_awaiting(printer_id):
     Printer.objects.filter(pk=printer_id, awaiting_removal=True).update(awaiting_removal=False)
 
 
+#  Модели без истории заданий на самом принтере (см. drivers/creality_native.py) — если соединение
+# обрывается прямо во время печати, монитор пересоздаётся с нуля и теряет отслеживание задания
+# в памяти. Иначе такое задание не попадёт ни в историю, ни в «ждёт снятия» никогда.
+NO_SERVER_HISTORY_DRIVERS = {"creality_native"}
+
+
 class PrinterWorker:
     def __init__(self, printer, session):
         self.printer = printer
@@ -91,6 +97,7 @@ class PrinterWorker:
         self.connected = False
         self.last_state = base.offline_state()
         self.pending_on = 0.0
+        self.pending_job_check = None  # состояние перед обрывом связи, если задание было активно
         self.task = None
 
     @staticmethod
@@ -111,15 +118,48 @@ class PrinterWorker:
 
     async def on_state(self, state):
         self.connected = True
-        self.last_state = state
         if state["status"] == base.PRINTING:
             await clear_awaiting(self.printer.pk)
+        if self.pending_job_check is not None:
+            pending = self.pending_job_check
+            self.pending_job_check = None
+            pending_job = pending.get("job") or {}
+            current_job = state.get("job") or {}
+            if current_job.get("filename") != pending_job.get("filename"):
+                await self._finish_job_after_gap(pending)
+        self.last_state = state
         await sync_to_async(write_state)(self.printer.pk, state)
 
     async def on_job(self, job, live):
         created = await save_job(self.printer.pk, job, live)
         if created:
             log.info("%s: задание %s — %s", self.printer.name, job["filename"], job["status"])
+
+    async def _finish_job_after_gap(self, snapshot):
+        """Соединение обрывалось во время печати, а при восстановлении задания уже нет: у этой
+        модели нет истории на самом принтере (NO_SERVER_HISTORY_DRIVERS), поэтому факт завершения
+        иначе был бы потерян навсегда. Закрываем задание по последним показаниям перед обрывом —
+        точный момент окончания неизвестен, только то, что оно было активно и перестало быть."""
+        job = snapshot.get("job") or {}
+        if not job.get("filename"):
+            return
+        elapsed = job.get("elapsed") or 0.0
+        progress = job.get("progress") or 0.0
+        start_time = (snapshot.get("updated") or time.time()) - elapsed
+        await self.on_job(
+            {
+                "external_id": f"gap:{job['filename']}@{round(start_time)}",
+                "filename": job["filename"],
+                "status": "completed" if progress >= 0.999 else "interrupted",
+                "start_time": start_time,
+                "end_time": time.time(),
+                "print_duration": elapsed,
+                "total_duration": elapsed,
+                "filament_mm": job.get("filament_mm") or 0.0,
+                "filament_g": None,
+            },
+            live=True,
+        )
 
     async def heartbeat(self):
         last_flush = time.monotonic()
@@ -154,6 +194,12 @@ class PrinterWorker:
                 except Exception as e:  # noqa: BLE001 — любая ошибка связи ведёт к переподключению
                     log.info("%s: нет связи (%s), повтор через %s с", self.printer.name, e, delay)
                     self.connected = False
+                    if (
+                        profile.driver in NO_SERVER_HISTORY_DRIVERS
+                        and self.last_state.get("job")
+                        and self.last_state.get("status") in (base.PRINTING, base.PAUSED)
+                    ):
+                        self.pending_job_check = self.last_state
                     self.last_state = base.offline_state(updated=time.time())
                     await sync_to_async(write_state)(self.printer.pk, self.last_state)
                     await asyncio.sleep(delay)
