@@ -1,496 +1,177 @@
-# Студия 3D — система управления студией 3D-печати
+<p align="center">
+  <img src="assets/github/logo.svg" width="440" alt="Studio3D — 3D print farm management">
+</p>
 
-Бесплатный self-hosted сервер для студии 3D-печати:
-- мониторинг принтеров и камеры;
-- уведомления в Telegram;
-- CRM и склад пластика;
-- точный расчёт себестоимости;
-- подключение собственных устройств студии по MQTT.
+<p align="center">
+  <strong>English</strong> · <a href="README.ru.md">Русский</a>
+</p>
 
-Работает в локальной сети, разворачивается в Docker.
+<p align="center">
+  Self-hosted management system for 3D printing studios and print farms: Klipper / Moonraker printers, cameras,
+  G-code checks, machine hours and roles — on your local network, in Docker.
+</p>
 
-> **Статус: этап 3 из 11 — принтеры.** Работают каркас (Docker, роли, вход, журнал, резервные копии) и принтеры: добавление, живой дашборд, карточка с камерой, пауза, отмена, запуск файла, загрузка G-code, история заданий, наработка. Проверенные профили — **QIDI Q1 Pro** и **Creality K1C** (оба через Moonraker), **Creality K1** (нативный WebSocket) — все на сервере студии, ветка `dev`; в `main` пока только Q1 Pro. История версий — в [CHANGELOG.md](CHANGELOG.md).
+<p align="center">
+  <a href="https://github.com/neiroJob/studio3d/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/neiroJob/studio3d/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: BSL 1.1" src="https://img.shields.io/badge/license-BSL%201.1-orange.svg"></a>
+  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776AB.svg">
+  <img alt="Django 5.2" src="https://img.shields.io/badge/django-5.2-0C4B33.svg">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/docker-compose-2496ED.svg">
+  <img alt="Klipper / Moonraker" src="https://img.shields.io/badge/Klipper-Moonraker-B12F35.svg">
+</p>
 
-## Карта развития
+Studio3D shows everything that happens in a 3D printing studio in one place: which printers are printing, what is
+on the bed, how much time is left, what failed and why, and how many hours each machine has worked. It runs on your
+own server inside the studio network — no cloud account, no subscription, nothing installed on the printers.
 
-Полный путь — 11 этапов. Каждый следующий начинается после того, как предыдущий отработал на сервере студии без замечаний.
+> **Status: stage 3 of 11 — printers.** Pre-1.0, under active development. Available today:
+> - foundation: Docker install, first-run wizard, login with brute-force protection, roles and permissions, users,
+>   electricity tariffs, audit log, daily database backups;
+> - printers: adding a printer, live dashboard, printer card with camera and light, pause / resume / cancel,
+>   start a file, G-code upload with progress and compatibility check, model thumbnails, job history,
+>   machine hours, Klipper messages.
+>
+> Verified on real hardware: **QIDI Q1 Pro** and **Creality K1C** (Moonraker), **Creality K1** (native
+> WebSocket). More models are added after they are tested on real printers. See [CHANGELOG.md](CHANGELOG.md) and [ROADMAP.md](ROADMAP.md).
+>
+> The user interface is in Russian today; English UI is on the roadmap.
 
-| № | Этап | Статус |
-| --- | --- | --- |
-| 1 | ТЗ и кликабельный прототип | Прототип готов, ТЗ v0.1 — ждём замечаний от студии |
-| 2 | Каркас: установка в Docker, роли, вход, журнал, резервные копии | ✅ готово, работает на сервере |
-| 3 | Принтеры: добавление, дашборд, управление печатью, файлы, история, наработка | В работе — QIDI Q1 Pro ✅, Creality K1 ✅ и Creality K1C ✅ на сервере (ветка `dev`); в `main` только Q1 Pro |
-| 4 | Остальные модели парка: QIDI Plus 4 и Q2, Elegoo Neptune 4 Max | Планируется |
-| 5 | Камеры (снимки по расписанию, живое видео, таймлапсы), уведомления в Telegram, фоновые задачи | Планируется |
-| 6 | Склад: катушки пластика с автосписанием, расходники | Планируется |
-| 7 | CRM (клиенты, заказы, изделия, задания печати, файлы) и расчёт себестоимости | Планируется |
-| 8 | ТО: регламенты, напоминания, журнал обслуживания | Планируется |
-| 9 | Собственные устройства студии по MQTT; расширения — новые модели и устройства пакетом, без правки кода | Планируется |
-| 10 | Пока не определено | — |
-| 11 | Пока не определено | — |
+## Screenshots
 
-Темы этапов 10 и 11 ещё не зафиксированы нигде в ТЗ или памяти проекта — если они уже решены, стоит сказать, и я впишу.
+![Studio3D dashboard: six printers in different states](assets/github/dashboard.png)
 
-## Оглавление
+<table>
+  <tr>
+    <td><img src="assets/github/printer.png" alt="Printer card: camera, current job, light, temperatures"></td>
+    <td><img src="assets/github/printer-error.png" alt="Print error explained in plain language with Klipper messages"></td>
+  </tr>
+  <tr>
+    <td><img src="assets/github/gcode-check.png" alt="G-code check before upload: file sliced for another printer"></td>
+    <td><img src="assets/github/add-printer.png" alt="Adding a printer: model, IP address, connection check"></td>
+  </tr>
+</table>
 
-1. [Возможности](#1-возможности)
-2. [Документы](#2-документы)
-3. [Стек](#3-стек)
-4. [Поддерживаемые принтеры](#4-поддерживаемые-принтеры)
-5. [Установка на Ubuntu Server](#5-установка-на-ubuntu-server)
-6. [Первый запуск в браузере](#6-первый-запуск-в-браузере)
-7. [Принтеры](#7-принтеры)
-8. [Управление: статус, логи, перезапуск](#8-управление-статус-логи-перезапуск)
-9. [Обновление](#9-обновление)
-10. [Резервные копии](#10-резервные-копии)
-11. [Настройки (.env)](#11-настройки-env)
-12. [Разработка](#12-разработка)
-13. [Если что-то не работает](#13-если-что-то-не-работает)
-14. [Лицензия](#14-лицензия)
+<p align="center"><img src="assets/github/mobile-dark.png" width="300" alt="Dashboard on a phone, dark theme"></p>
 
-## 1. Возможности
+All screenshots use synthetic demo data (`python manage.py demo_data`); they contain no real addresses or orders.
 
-| Модуль | Что делает | Готово |
-| --- | --- | --- |
-| Роли | Админ, менеджер, оператор и свои роли; несколько ролей на одном логине, права суммируются | ✅ этап 2 |
-| Вход | Логин и пароль, «запомнить меня», блокировка IP после 5 неудачных попыток на 5 минут | ✅ этап 2 |
-| Журнал | Кто, когда и что сделал | ✅ этап 2 |
-| Резервные копии | Ежесуточный дамп БД, срок хранения, скачивание из веба | ✅ этап 2 |
-| Принтеры | Добавление по модели и IP, живое состояние, камера, управление печатью, файлы, история, наработка | ✅ этап 3 (QIDI Q1 Pro, Creality K1, Creality K1C) |
-| ТО | Регламенты, напоминания, журнал обслуживания | этап 8 |
-| Камеры | Снимки по расписанию, живое видео, таймлапсы | этап 5 |
-| Telegram | Уведомления сотрудникам и клиентам | этап 5 |
-| Склад | Катушки пластика с автоматическим списанием, расходники | этап 6 |
-| CRM | Клиенты, заказы, изделия, задания печати, файлы | этап 7 |
-| Себестоимость | Пластик, электроэнергия, амортизация, аренда, постобработка, брак | этап 7 |
-| Устройства | MQTT: климат-контроллер, розетки с отключением, правила автоматики | этап 9 |
-| Расширения | Новые модели принтеров и типы устройств — загрузкой пакета без правки кода | этап 9 |
+## What Studio3D does
 
-## 2. Документы
+- **Live dashboard** for the whole farm: status, progress, layer, time left, temperatures and a camera preview for
+  every printer; filters by state and an "attention needed" list (errors, paused prints, parts waiting to be
+  removed, heaters left on without a print).
+- **Printer card**: camera, current job, grams of filament from G-code metadata, temperatures of nozzle, bed and
+  chamber, case light, pause / resume / cancel, files on the printer, upload with a two-stage progress bar.
+- **G-code compatibility check** before upload and start: missing start macro (e.g. `PRINT_START` on QIDI), foreign
+  start macros (`START_PRINT`), tool changes on a single-extruder printer, `; printer_model` mismatch.
+- **Errors in plain language**: common Klipper errors are explained, unknown commands from the file are listed,
+  recent Klipper responses are shown in the card.
+- **"Part removed" workflow**: after a successful print the printer waits until an operator confirms the bed is
+  clear; starting a new job is blocked until then.
+- **Machine hours**: print hours (history imported from the printer + jobs recorded by the system) and power-on
+  hours.
+- **Roles**: admin, manager, operator and custom roles; several roles per login.
+- **Audit log**, **daily PostgreSQL backups** with download from the web UI, **dark and light theme**, mobile layout.
+- **Extensible printer support**: a new model on a supported protocol is a YAML profile, not code.
 
-| Документ | Ссылка |
-| --- | --- |
-| Техническое задание | https://claude.ai/artifact/U8jqUKDMy6RDFV2PTJ796E |
-| Прототип интерфейса | https://claude.ai/artifact/MvDVzkDwin2iZHKgbheDCP |
-| Подготовка сервера (подробно, с Claude Code) | https://claude.ai/artifact/SJHHq1bqY3exfFb3CR765U |
-| Память проекта | https://github.com/neiroJob/ai_studio3d_memory |
+### Roadmap highlights
 
-## 3. Стек
+Telegram notifications and camera timelapses · filament stock with automatic consumption · CRM and exact job cost
+(filament, electricity, depreciation, rent) · maintenance schedules · MQTT devices (smart plugs, climate control) ·
+more printer models · extension packages · English UI. Full plan: [ROADMAP.md](ROADMAP.md).
 
-| Компонент | Технология | Есть в каркасе |
-| --- | --- | --- |
-| Веб и API | Django 5.2, HTMX, Alpine.js, gunicorn | да |
-| База данных | PostgreSQL 16 | да |
-| Кэш и шина событий | Redis 7 | да |
-| Вход на порту 80, статика | Caddy 2 | да |
-| Резервные копии | pg_dump по расписанию | да |
-| Связь с принтерами | Сервис collector: Python asyncio + aiohttp, WebSocket Moonraker | да |
-| Telegram-бот | aiogram 3 | этап 5 |
-| Фоновые задачи | Celery | этап 5 |
-| Устройства | MQTT, Mosquitto 2 | этап 9 |
+## Supported printers
 
-Контейнеры:
+Nothing is installed on the printers; Studio3D talks to the stock firmware.
 
-```
-          браузер (локальная сеть)
-                  │ :80
-            ┌─────▼─────┐
-            │   proxy   │  Caddy: /static, /media — сам; остальное — в web
-            └─────┬─────┘
-            ┌─────▼─────┐     ┌─────────┐     ┌───────────┐  WebSocket, HTTP  ┌──────────┐
-            │    web    │────►│  redis  │◄────│ collector │◄─────────────────►│ принтеры │
-            │  Django   │     └─────────┘     └─────┬─────┘                   └──────────┘
-            └─────┬─────┘   живое состояние         │ задания, наработка
-            ┌─────▼─────┐                           │
-            │    db     │◄──────────────────────────┘
-            │ Postgres  │◄────┐
-            └───────────┘   ┌─┴───────┐
-                            │ backup  │  pg_dump раз в сутки → ./backups
-                            └─────────┘
-```
-
-## 4. Поддерживаемые принтеры
-
-Планируется в версии 1. На принтеры ничего не устанавливается, работа идёт со штатной прошивкой.
-
-| Производитель | Модель | Драйвер | Профиль в системе |
+| Vendor | Model | Driver | Status |
 | --- | --- | --- | --- |
-| QIDI | Q1 Pro | moonraker | ✅ есть, проверен на принтере |
-| QIDI | Plus 4, Q2 | moonraker | после проверки по сети |
-| Elegoo | Neptune 4 Max | moonraker | после проверки по сети |
-| Creality | K1C ревизии 2025 | moonraker | ✅ есть, проверен на двух принтерах, включая запуск печати через систему |
-| Creality | K1 | creality_native | ✅ есть, проверен на принтере, включая запуск печати через систему |
-| Creality | K1C ранних ревизий | creality_native | после проверки по сети |
+| QIDI | Q1 Pro | moonraker | ✅ profile verified on a real printer |
+| QIDI | Plus 4, Q2 | moonraker | planned, after testing on hardware |
+| Elegoo | Neptune 4 Max | moonraker | planned, after testing on hardware |
+| Creality | K1C (2025 revision) | moonraker + port 9999 for the light | ✅ verified on two printers, incl. starting prints |
+| Creality | K1 | creality_native (WebSocket 9999) | ✅ verified on a real printer, incl. starting prints |
+| Creality | early K1C revisions | creality_native | planned, after testing on hardware |
 
-Профиль модели — YAML-файл в `web/printers/profiles/`. В нём задаются драйвер, порт, адрес камеры и возможности. Пример — `qidi_q1_pro.yaml`.
+Any Klipper printer with Moonraker should work with a new profile — see
+[adding a printer model](README.ru.md#125-новая-модель-принтера-и-тесты-драйвера) and the
+[printer support request](https://github.com/neiroJob/studio3d/issues/new?template=printer_support.yml) template.
 
-**Creality K1.** У принтера нет Moonraker — всё идёт через собственный WebSocket на порту 9999 (драйвер `creality_native`). Проверено на реальном принтере через систему: статус, температуры, пауза, продолжение, отмена, свет, список файлов, загрузка файла (полный цикл — загружен, найден в списке, удалён), запуск печати кнопкой «Печать», завершение задания (переход в «ждёт снятия», запись в историю и наработку). Загрузка идёт по HTTP на порт 80 (`POST /upload/<имя>`), запуск файла — отдельной командой по WebSocket (`opGcodeFile: printprt:<путь>`); обе команды взяты из собственного веб-интерфейса принтера (его JS он отдаёт сам на порту 80). У каждого файла есть превью модели — `GET /downloads/humbnail/<имя>.png`, тоже оттуда же, показывается в списке файлов. Истории заданий принтер не хранит, часы печати считаются только с момента подключения. Камера у этой модели — WebRTC на порту 8000 (как у K1C 2025), в системе пока не подключена: у ассистента, добавлявшего поддержку, физической камеры под рукой не было.
+## Quick start
 
-**Creality K1C (ревизии 2025).** В отличие от K1, у этой прошивки есть Moonraker (сборка `nexusp`), поэтому используется тот же драйвер `moonraker`, что и у QIDI. Проверено на двух реальных принтерах через систему: статус, температуры, пауза, продолжение, отмена, список файлов, запуск печати, история и наработка (через стандартные `server/history`), свет. Особенности этой сборки Moonraker: температура камеры доступна только как показание датчика без цели (`temperature_sensor chassis`), слой печати не отдаётся даже во время печати (`print_stats.info` всегда пустой — показываются только проценты), управления светом в объектах Moonraker нет. Свет при этом есть: на принтере параллельно с Moonraker открыт тот же нативный WebSocket-протокол, что у K1 (порт 9999) — свет переключается им. Состояние света вживую недоступно, кнопка показывает последнюю отправленную команду. Камера физически есть, но порт 8000 отдаёт только HTML-страницу WebRTC-просмотра (сигналинг через Google STUN), а не JPEG-снимок — отдельного протокола WebRTC в системе нет, поэтому страница принтера показывается во фрейме на странице принтера (без миниатюры на плитке дашборда и без таймлапса); если страница не отвечает — «Камера недоступна», как у моделей со снимком.
-
-**Превью моделей в списке файлов.** Для принтеров на Moonraker (QIDI, K1C) превью берётся из метаданных G-code (`server/files/metadata` → `thumbnails[]`), которые кладёт туда слайсер — тот же набор, что показывает Fluidd/Mainsail. Для K1 — отдельный путь принтера (см. выше). Показывается самое маленькое доступное превью.
-
-## 5. Установка на Ubuntu Server
-
-### 5.1. Что нужно
-
-- Ubuntu Server 26.04 LTS (подойдут и 24.04 / 22.04).
-- 4 ядра, 8 ГБ ОЗУ, SSD от 256 ГБ — это ориентир, основной объём потом займут таймлапсы.
-- Статический IP в сети студии.
-- Доступ в интернет на время установки и обновлений: скачиваются образы Docker.
-
-### 5.2. Docker и Git
-
-Если сервер уже подготовлен по документу «Подготовка сервера», переходите к 5.3.
-
-Docker ставится из официального репозитория Docker. Не используйте snap и пакет `docker.io`.
+Requirements: Ubuntu Server 22.04 / 24.04 / 26.04 (any Linux with Docker should work), Docker Engine with the
+Compose plugin, and network access from the server to the printers.
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl git
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Чтобы запускать docker без sudo. После этой команды выйдите из SSH и зайдите снова.
-sudo usermod -aG docker $USER
-```
-
-Проверка — обе команды должны вывести версию:
-
-```bash
-docker --version
-docker compose version
-```
-
-### 5.3. Скачать проект
-
-Репозиторий памяти проекта нужен только для разработки с Claude Code. Для работы студии хватит одного `studio3d`.
-
-```bash
-mkdir -p ~/projects && cd ~/projects
 git clone https://github.com/neiroJob/studio3d.git
 cd studio3d
-```
-
-### 5.4. Установить и запустить
-
-**Вариант А — одной командой (рекомендуется):**
-
-```bash
 bash install.sh
 ```
 
-Скрипт:
-1. Проверяет, что Docker установлен.
-2. Создаёт файл `.env` из шаблона `.env.example`, если `.env` ещё нет. Случайные `SECRET_KEY` и пароль БД генерируются сами.
-3. Собирает и запускает контейнеры.
-4. Печатает адрес, который нужно открыть в браузере.
+`install.sh` creates `.env` with random secrets, builds and starts the containers and prints the address to open.
+Open `http://<server-ip>` and complete the first-run wizard (administrator, studio name, time zone, electricity
+tariff). Then use **«Добавить принтер»** (Add printer): choose the model, enter the IP address and press
+**«Проверить связь»** (Check connection).
 
-**Вариант Б — вручную:**
-
-```bash
-cp .env.example .env
-nano .env           # задать SECRET_KEY и DATABASE_PASSWORD (как сгенерировать — написано в файле)
-mkdir -p backups
-docker compose up -d --build
-```
-
-Первый запуск занимает 2–5 минут: скачиваются образы и собирается контейнер `web`.
-
-### 5.5. Проверить, что всё поднялось
+Update to the latest version:
 
 ```bash
-docker compose ps
-```
-
-Все шесть контейнеров — `web`, `collector`, `db`, `redis`, `proxy`, `backup` — должны быть в состоянии `running`. У `web` и `db` дополнительно должно стоять `healthy`; `web` становится `healthy` примерно через 30 секунд.
-
-```bash
-curl http://localhost/healthz     # ответ: {"status": "ok"}
-```
-
-> Порт 80 занят другим сервисом? Задайте в `.env`, например, `HTTP_PORT=8080` и выполните `docker compose up -d`. Адрес тогда будет `http://<IP сервера>:8080`.
-
-## 6. Первый запуск в браузере
-
-Откройте с любого компьютера в сети студии `http://<IP сервера>`. Пока в системе нет ни одного пользователя, любой адрес ведёт в **мастер первого запуска**. В нём:
-
-1. Администратор: имя, логин и пароль. Пароль — не короче 8 символов, не только цифры, не слишком простой.
-2. Студия: название и часовой пояс.
-3. Тариф электроэнергии, ₽ за кВт·ч. Он нужен для расчёта себестоимости. Позже тариф меняется в «Настройках»: новый добавляется с датой начала действия, а старые расчёты не пересчитываются.
-
-После мастера вы сразу попадаете на дашборд под администратором. Дальше:
-- «Пользователи» — завести сотрудников и назначить роли;
-- «Роли и права» — поменять набор прав или создать свою роль;
-- «Резервные копии» — проверить, что копии появляются.
-
-Мастер можно пройти только один раз. Пароли сбрасывает администратор в разделе «Пользователи»; самостоятельного восстановления пароля нет.
-
-## 7. Принтеры
-
-### 7.1. Что нужно от сети
-
-Сервер должен достучаться до принтера по IP. Moonraker слушает порт 7125, камера QIDI — порт 8080. Закрепите за принтером постоянный IP в роутере: если адрес сменится, принтер пропадёт со связи.
-
-Проверка с сервера:
-
-```bash
-curl http://<IP принтера>:7125/server/info
-```
-
-### 7.2. Добавить принтер
-
-Нужна роль с правом «Добавлять и удалять принтеры» — по умолчанию это админ.
-
-1. «Добавить принтер» в меню → производитель → модель.
-2. Имя, IP, зона. Порт оставьте пустым — он возьмётся из профиля. API-ключ нужен, только если на принтере включена авторизация Moonraker.
-3. **«Проверить связь»** — показывает версии Klipper и Moonraker, состояние принтера, найдена ли камера. Там же подставляются часы печати из истории принтера.
-4. Мощность, стоимость и ресурс для амортизации. Они пойдут в расчёт себестоимости на этапе 7.
-5. «Добавить принтер». Через несколько секунд коллектор подключится, и на дашборде появится живое состояние.
-
-На принтер ничего не устанавливается: работаем со штатной прошивкой.
-
-### 7.3. Что видно и что можно делать
-
-| Где | Что | Право |
-| --- | --- | --- |
-| Дашборд | Плитки со статусом, прогрессом, слоем, температурами, превью камеры; сводка по статусам; «Требует внимания» | Видеть дашборд |
-| Карточка → «Сейчас» | Камера, задание (файл, прогресс, слой, прошло и осталось, пластик), температуры сопла, стола и камеры | Видеть дашборд |
-| Пауза, продолжение, отмена | Кнопки в плитке и карточке | Пауза, отмена, продолжение печати |
-| Карточка → «Файлы» | Список файлов на принтере, запуск печати, загрузка G-code с прогрессом (на сервер, затем на принтер) | Пауза, отмена, продолжение печати |
-| Проверка файла | Перед загрузкой и запуском система проверяет, что G-code нарезан под эту модель (стартовый макрос, `printer_model`). При подозрении — предупреждение и подтверждение | Пауза, отмена, продолжение печати |
-| Сообщения принтера | Последние ответы Klipper по заданию в карточке: незнакомые команды, ошибки | Видеть дашборд |
-| Свет | Включить и выключить свет в принтере — в плитке и карточке (если модель умеет, у Q1 Pro — да) | Пауза, отмена, продолжение печати |
-| «Снял изделие» | После успешной печати принтер ждёт снятия; запуск новой печати до отметки заблокирован | Отметить «снял изделие» |
-| Карточка → «История», «Наработка» | Задания с результатом и расходом, часы печати и включения | Видеть дашборд |
-| Карточка → «Настройки» | IP, порт, мощность, стоимость, отключение опроса, удаление | Добавлять и удалять принтеры |
-
-Состояние обновляется каждые 3 секунды, превью камеры — раз в `CAMERA_REFRESH_SECONDS` секунд (по умолчанию 10). Все команды пишутся в журнал действий.
-
-### 7.4. Наработка
-
-- **Часы печати** = история принтера на момент добавления + задания, завершённые после подключения. Задания берутся из истории Moonraker, поэтому печать, прошедшая при выключенном сервере, тоже учтётся.
-- **Часы включения** — время, пока принтер отвечает. Начинают считаться с момента добавления.
-
-### 7.5. Коллектор
-
-Связь с принтерами держит контейнер `collector`. Если принтер выключен или пропал из сети, коллектор сам переподключается: сначала через 5 секунд, дальше реже, до раза в минуту.
-
-```bash
-docker compose logs -f collector     # подключения и обрывы
-```
-
-## 8. Управление: статус, логи, перезапуск
-
-Все команды выполняются в папке проекта: `cd ~/projects/studio3d`.
-
-| Что | Команда |
-| --- | --- |
-| Состояние контейнеров | `docker compose ps` |
-| Логи веба (live, выход — Ctrl+C) | `docker compose logs -f web` |
-| Логи всех сервисов за последний час | `docker compose logs --since 1h` |
-| Перезапустить веб | `docker compose restart web` |
-| Остановить всё (данные сохраняются) | `docker compose down` |
-| Запустить снова | `docker compose up -d` |
-| Консоль Django | `docker compose exec web python manage.py shell` |
-| Консоль базы | `docker compose exec db psql -U studio3d studio3d` |
-
-Все контейнеры работают с `restart: unless-stopped`, поэтому после перезагрузки сервера поднимаются сами.
-
-Данные лежат в томах Docker: `studio3d_pgdata` — база, `studio3d_media` — файлы. Ещё есть папка `backups/` в каталоге проекта. Команда `docker compose down` данные **не** удаляет. Удаляет их `docker compose down -v` — не выполняйте её без свежей резервной копии.
-
-## 9. Обновление
-
-```bash
-cd ~/projects/studio3d
 bash update.sh
 ```
 
-Скрипт делает `git pull`, пересобирает и перезапускает изменившиеся контейнеры и удаляет старые образы. Миграции базы данных применяются автоматически при старте `web`. Файл `.env` при обновлении не трогается.
+The detailed guide — Docker installation, backups and restore, `.env` settings, development mode, troubleshooting —
+is in [README.ru.md](README.ru.md) (Russian).
 
-То же вручную:
-
-```bash
-git pull
-docker compose up -d --build
-```
-
-Что изменилось в новой версии — в [CHANGELOG.md](CHANGELOG.md).
-
-## 10. Резервные копии
-
-**Автоматически.** Контейнер `backup` раз в сутки делает дамп базы в папку `backups/` рядом с `docker-compose.yml`. Файлы называются `studio3d_ГГГГ-ММ-ДД_ЧЧ-ММ.dump`. Время дампа задаёт `BACKUP_TIME`, срок хранения в днях — `BACKUP_KEEP_DAYS` (оба в `.env`). Медиафайлы в дамп не входят: при необходимости копируйте том `studio3d_media` отдельно.
-
-**Скачать копию.** В вебе: «Резервные копии» → «Скачать». Раздел доступен только админу.
-
-**Сделать копию прямо сейчас:**
-
-```bash
-docker compose exec backup /bin/sh /backup.sh now
-```
-
-**Восстановить из копии.** Текущие данные в базе будут заменены данными из файла.
-
-```bash
-cd ~/projects/studio3d
-docker compose stop web
-docker compose exec -T db pg_restore --clean --if-exists --no-owner \
-  -U studio3d -d studio3d < backups/studio3d_2026-10-27_03-30.dump
-docker compose start web
-```
-
-Чтобы перенести систему на другой сервер, поставьте её по разделу 5, скопируйте туда `.env` и файл дампа, затем выполните восстановление по команде выше.
-
-## 11. Настройки (.env)
-
-| Переменная | По умолчанию | Что задаёт |
-| --- | --- | --- |
-| `SECRET_KEY` | — (обязательно) | Секретный ключ Django. `install.sh` генерирует сам |
-| `DATABASE_PASSWORD` | — (обязательно) | Пароль базы данных. `install.sh` генерирует сам |
-| `DATABASE_NAME`, `DATABASE_USER` | `studio3d` | Имя базы и пользователя |
-| `HTTP_PORT` | `80` | Порт веб-интерфейса на сервере |
-| `TIME_ZONE` | `Europe/Moscow` | Часовой пояс по умолчанию; рабочий задаётся в мастере и в настройках |
-| `SESSION_HOURS` | `12` | Сколько живёт вход без «запомнить меня» |
-| `REMEMBER_DAYS` | `30` | Сколько живёт вход с «запомнить меня» |
-| `LOGIN_MAX_ATTEMPTS` | `5` | Сколько неудачных попыток входа допускается с одного IP |
-| `LOGIN_LOCK_MINUTES` | `5` | На сколько минут блокируется IP после этих попыток |
-| `CAMERA_REFRESH_SECONDS` | `10` | Как часто обновлять превью камер, сек |
-| `BACKUP_TIME` | `03:30` | Время ежесуточного дампа |
-| `BACKUP_KEEP_DAYS` | `14` | Сколько дней хранить дампы |
-| `DEBUG` | `0` | Режим отладки. В студии всегда `0` |
-
-После изменения `.env` примените его: `docker compose up -d`.
-
-## 12. Разработка
-
-### 12.1. Структура репозитория
+## Architecture
 
 ```
-studio3d/
-├── docker-compose.yml        рабочий запуск: web, collector, db, redis, proxy, backup
-├── docker-compose.dev.yml    режим разработки: автоперезагрузка кода
-├── .env.example              шаблон настроек
-├── install.sh / update.sh    установка и обновление
-├── deploy/
-│   ├── caddy/Caddyfile       вход на порту 80
-│   └── backup/backup.sh      ежесуточный дамп БД
-├── web/                      Django-проект (контейнер web)
-│   ├── studio3d/             настройки, корневые URL
-│   ├── accounts/             вход, блокировка IP, роли и права, пользователи
-│   ├── core/                 мастер первого запуска, настройки студии, тарифы, журнал, бэкапы
-│   ├── printers/             принтеры: модели, профили (YAML), драйверы, коллектор, страницы
-│   │   ├── profiles/         профили моделей: qidi_q1_pro.yaml …
-│   │   └── drivers/          драйверы: moonraker.py; base.py — единая модель состояния
-│   ├── templates/            HTML-шаблоны
-│   ├── static/               CSS, JS, HTMX и Alpine.js (локально, без CDN)
-│   └── tests/                автотесты (pytest)
-├── tools/moonraker_dump.py   запись ответов принтера для тестов (только чтение)
-└── .github/workflows/ci.yml  линтер и тесты на каждый push
+  browser (LAN) ──:80──► proxy (Caddy) ──► web (Django + HTMX, gunicorn)
+                                              │           │
+                                              ▼           ▼
+                                        db (PostgreSQL)  redis ◄── collector (asyncio) ◄──► printers
+                                              ▲                     WebSocket / HTTP (Moonraker)
+                                        backup (pg_dump daily)
 ```
 
-Права описаны в одном месте — `web/accounts/roles.py`, по таблице из ТЗ. Роль — это группа Django. Базовые роли создаются автоматически после миграций.
-
-### 12.2. Рабочий цикл: Windows → GitHub → сервер
-
-Код правится на рабочем компьютере (например, `F:\Cloud\GitHub\studio3d`) и проверяется на сервере. Связь между ними — через GitHub.
-
-**1. На Windows** — закоммитить и отправить изменения (Git Bash, PowerShell или VS Code):
-
-```bash
-git add -A
-git commit -m "Что сделано (STU-N)"
-git push
-```
-
-**2. На сервере** — забрать изменения и пересобрать:
-
-```bash
-cd ~/projects/studio3d
-bash update.sh
-```
-
-**3. Проверить** в браузере `http://<IP сервера>` и в логах `docker compose logs -f web`.
-
-Чтобы проверить ветку, не трогая `main`:
-
-```bash
-git fetch
-git switch имя-ветки        # обратно: git switch main
-docker compose up -d --build
-```
-
-### 12.3. Быстрая проверка: режим разработки на сервере
-
-В этом режиме папка `web/` монтируется в контейнер, а Django сам перезапускается при изменении файлов. После `git pull` пересобирать ничего не нужно — достаточно обновить страницу.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
-
-- `http://<IP сервера>:8000` — напрямую в Django, с подробными ошибками.
-- `http://<IP сервера>` — через proxy, как в рабочем режиме.
-
-Коллектор в этом режиме сам не перезапускается: после правок в `printers/` выполните `docker compose restart collector`. Пересборка нужна только при изменении `requirements.txt` или `Dockerfile`. Вернуться в рабочий режим: `docker compose up -d --build`.
-
-Можно и без GitHub: подключиться к серверу из VS Code через Remote-SSH или работать прямо на сервере в Claude Code (`~/projects/studio3d`). Тогда правки сразу видны в режиме разработки, а коммит и push делаются с сервера.
-
-### 12.4. Тесты и линтер
-
-В контейнере, на сервере:
-
-```bash
-docker compose exec web sh -c "pip install -q -r requirements-dev.txt && pytest -q && ruff check ."
-```
-
-Локально без Docker (Python 3.12+; вместо PostgreSQL используется SQLite):
-
-```bash
-cd web
-python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
-pytest -q
-ruff check .
-```
-
-GitHub Actions запускает те же проверки на каждый push и pull request.
-
-### 12.5. Новая модель принтера и тесты драйвера
-
-1. Запишите ответы принтера. Скрипт только читает, принтеру ничего не отправляет:
-   ```bash
-   python3 tools/moonraker_dump.py <IP принтера> > web/tests/fixtures/<модель>_idle.json
-   ```
-2. Добавьте профиль `web/printers/profiles/<id>.yaml` по образцу `qidi_q1_pro.yaml`. Поля описаны в `web/printers/profiles.py`. Для проверки G-code укажите `gcode.start_macro` — имя стартового макроса из `printer.cfg` принтера — и `gcode.model_names` — как слайсер пишет модель в `; printer_model`.
-3. Тесты драйвера работают на записанных ответах через поддельный Moonraker (`web/tests/fake_moonraker.py`). Живой принтер для них не нужен.
-
-### 12.6. Правила
-
-- Окончания строк — LF; это закреплено в `.gitattributes`. Скрипты с CRLF ломаются в Linux-контейнерах. Если клонировали до появления `.gitattributes`: `git add --renormalize .`.
-- Номер задачи YouGile `STU-N` пишется в сообщении коммита.
-- Каждое заметное изменение записывается в `CHANGELOG.md`, раздел «Не выпущено».
-- Репозиторий памяти `ai_studio3d_memory` держите рядом с этим: `~/projects/studio3d` и `~/projects/ai_studio3d_memory`. `CLAUDE.md` подгружает память по относительному пути. Сама память в этот репозиторий не коммитится.
-
-## 13. Если что-то не работает
-
-| Симптом | Что проверить |
+| Container | Role |
 | --- | --- |
-| `install.sh`: «Docker не найден» | Раздел 5.2 |
-| `permission denied ... docker.sock` | После `usermod -aG docker` нужно перелогиниться |
-| `Задайте DATABASE_PASSWORD в .env` | В `.env` пустой пароль; запустите `bash install.sh` или заполните вручную |
-| `web` перезапускается по кругу | `docker compose logs web` — обычно нет `SECRET_KEY` или недоступна БД |
-| Страница не открывается по IP | `docker compose ps` — запущен ли `proxy`; не занят ли порт 80 (`sudo ss -ltnp | grep :80`); файрвол: `sudo ufw allow 80/tcp` |
-| `exec /app/entrypoint.sh: no such file` или `\r: not found` | Файлы с CRLF: `git add --renormalize .`, затем `docker compose up -d --build` |
-| «Вход с этого адреса закрыт» | Подождите `LOGIN_LOCK_MINUTES` минут или перезапустите redis: `docker compose restart redis` |
-| Принтер «Нет связи» | С сервера: `curl http://<IP>:7125/server/info`. Нет ответа — проверьте IP (не сменился ли), что принтер включён и в той же сети. Логи: `docker compose logs collector` |
-| Камера «недоступна» | С сервера: `curl -o /dev/null -w '%{http_code}' 'http://<IP>:8080/?action=snapshot'` — должно быть 200 |
-| Забыт пароль единственного админа | `docker compose exec web python manage.py changepassword <логин>` |
+| `web` | Django 5.2 + HTMX UI, roles, audit log, commands to printers |
+| `collector` | Keeps a WebSocket connection to every printer, writes live state to Redis and finished jobs to PostgreSQL, reconnects automatically |
+| `db` | PostgreSQL 16 |
+| `redis` | Live state, login throttling, cache |
+| `proxy` | Caddy on port 80, static files |
+| `backup` | Daily `pg_dump` with retention |
 
-## 14. Лицензия
+## Security
 
-Лицензия ещё не выбрана — вопрос открыт. До её появления код опубликован для ознакомления.
+- Designed for the studio's **local network**; no inbound access from the internet is required.
+- Passwords are hashed; printer API keys are encrypted in the database.
+- Login throttling per IP, CSRF protection, audit log of every printer command.
+- Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+Studio3D is **source-available** under the [Business Source License 1.1](LICENSE). It is not an OSI-approved open
+source license. In short:
+
+- ✅ **Free** to install and run your own studio or print farm — including when your studio earns money by printing.
+- ✅ Read, modify and fork the code; send improvements.
+- ❌ A **commercial license** is required to sell Studio3D or a product built on it, offer it as a hosted / SaaS
+  service, charge for installation or support based on it, or bundle it with hardware you sell.
+- ⏳ Each version converts to the Apache License 2.0 four years after its release.
+
+Plain-language explanation: [LICENSING.md](LICENSING.md). Commercial licensing: open an issue labelled
+"commercial license" or contact Telegram [@free_bird1987](https://t.me/free_bird1987).
+
+## Contributing
+
+Bug reports, printer profiles and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Contributions
+require agreeing to the [Contributor License Agreement](CLA.md) so the project can keep offering commercial licenses.
+
+## Support
+
+Questions and ideas: [GitHub Issues](https://github.com/neiroJob/studio3d/issues) · Telegram
+[@free_bird1987](https://t.me/free_bird1987). See [SUPPORT.md](SUPPORT.md).
+
+<sub>Klipper, Moonraker, QIDI, Creality, Elegoo and other names are trademarks of their respective owners; Studio3D is
+not affiliated with them.</sub>

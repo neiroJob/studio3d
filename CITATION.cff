@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you mention Studio3D in an article, video or study, please cite the release and commit you used."
+title: "Studio3D"
+type: software
+version: 0.2.3
+date-released: 2026-10-27
+authors:
+  - alias: "neiroJob"
+repository-code: "https://github.com/neiroJob/studio3d"
+license-url: "https://github.com/neiroJob/studio3d/blob/main/LICENSE"
+abstract: >-
+  Self-hosted management system for 3D printing studios and print farms: Klipper / Moonraker printers, cameras,
+  G-code compatibility checks, machine hours, roles and audit log. Runs on the local network in Docker.
+keywords:
+  - 3d-printing
+  - print-farm
+  - klipper
+  - moonraker
+  - self-hosted
+  - django

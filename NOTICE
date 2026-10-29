@@ -1,0 +1,33 @@
+Studio3D
+Copyright (c) 2026 neiroJob
+
+Licensed under the Business Source License 1.1. See LICENSE and LICENSING.md.
+
+This product includes or uses third-party software, each under its own license.
+The Business Source License applies only to Studio3D's own code.
+
+Bundled in this repository:
+  - htmx 2.0.4 (web/static/vendor/htmx-2.0.4.min.js) — Zero-Clause BSD — https://htmx.org
+  - Alpine.js 3.14.9 (web/static/vendor/alpine-3.14.9.min.js) — MIT License — https://alpinejs.dev
+
+Python dependencies (installed at build time, see web/requirements.txt):
+  - Django — BSD 3-Clause License
+  - psycopg — GNU LGPL v3
+  - django-redis — BSD 3-Clause License
+  - gunicorn — MIT License
+  - PyYAML — MIT License
+  - requests, requests-toolbelt — Apache License 2.0
+  - aiohttp — Apache License 2.0
+  - cryptography — Apache License 2.0 or BSD 3-Clause License
+
+Container images used by docker-compose.yml (not redistributed by this project):
+  - PostgreSQL — PostgreSQL License
+  - Redis — see https://redis.io/legal/licenses/
+  - Caddy — Apache License 2.0
+  - Python — Python Software Foundation License
+
+The Business Source License text is copyright (c) MariaDB Corporation Ab.
+"Business Source License" is a trademark of MariaDB Corporation Ab.
+
+Klipper, Moonraker, QIDI, Creality, Elegoo and other product names are trademarks
+of their respective owners. Studio3D is not affiliated with or endorsed by them.
