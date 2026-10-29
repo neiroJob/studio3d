@@ -88,6 +88,8 @@ class AuditLog(models.Model):
         PRINT_RESUME = "print_resume", "Печать продолжена"
         PRINT_CANCEL = "print_cancel", "Печать отменена"
         FILE_UPLOAD = "file_upload", "Файл загружен на принтер"
+        FILE_DELETE = "file_delete", "Файл удалён с принтера"
+        FILE_RENAME = "file_rename", "Файл переименован на принтере"
         PLATE_CLEARED = "plate_cleared", "Изделие снято"
         PRINTER_LIGHT = "printer_light", "Свет принтера"
         HEATERS_OFF = "heaters_off", "Нагрев выключен"

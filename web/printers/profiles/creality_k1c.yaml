@@ -43,7 +43,7 @@ camera:
   type: webrtc_iframe
   page_url: "http://{host}:8000"
 
-capabilities: [pause, resume, cancel, start_file, upload, light]
+capabilities: [pause, resume, cancel, start_file, upload, light, delete_file, rename_file]
 
 light:
   native_port: 9999

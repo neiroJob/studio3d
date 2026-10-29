@@ -21,6 +21,26 @@
     {% include "printers/_live.html" %}
   </div>
 </div>
+{% if "print_plate" in rights %}
+<dialog id="plate-dialog-{{ printer.pk }}" class="plate-dialog">
+  <form method="post" action="{% url 'printer_cleared' printer.pk %}" data-busy="Изделие снимается…">
+    {% csrf_token %}
+    <h2 style="margin:0 0 10px">Изделие снято — как прошла печать?</h2>
+    <label class="check"><input type="radio" name="quality" value="ok" checked> Без замечаний</label>
+    <label class="check"><input type="radio" name="quality" value="defect"> Брак</label>
+    <div class="defect-fields">
+      <label class="small muted">Причина</label>
+      <select name="defect_reason">{% for value, label in defect_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
+      <label class="small muted">Комментарий (необязательно)</label>
+      <textarea name="defect_note" rows="3"></textarea>
+    </div>
+    <div class="form-actions" style="margin-top:14px">
+      <button type="button" class="btn" data-close-dialog>Отмена</button>
+      <button type="submit" class="btn pri">Готово</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 
 {% elif tab == "files" %}
 <div class="stack">
@@ -47,6 +67,15 @@
     <p class="hint" style="margin:8px 0 0">Файл уходит в папку gcodes принтера. Перед запуском проверьте, что стол пуст.</p>
   </form>
   {% endif %}
+  {% if recovery_file %}
+  <div class="panel" style="border-color:var(--st-pause)">
+    <b>Найден файл восстановления после потери питания</b>
+    <p class="hint" style="margin:6px 0 10px">Принтер сам создаёт такой файл, если питание пропало во время печати (не проверено на реальном сценарии — предположение по памяти проекта). Если печать действительно обрывалась из-за потери питания, можно попробовать запустить его как обычный файл.</p>
+    <form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" data-busy="Печать ставится…" onsubmit="return confirm('Запустить восстановление печати на {{ printer.name|escapejs }}? Убедитесь, что стол и положение модели не нарушены.')">{% csrf_token %}
+      <input type="hidden" name="filename" value="{{ recovery_file }}"><input type="hidden" name="next" value="?tab=files">
+      <button class="btn warn">Восстановить печать</button></form>
+  </div>
+  {% endif %}
   <div class="panel">
     <h2>Файлы на принтере</h2>
     {% if files_error %}<div class="msg error">{{ files_error }}</div>{% else %}
@@ -56,7 +85,11 @@
       {% for f in files %}<tr>
         <td><img class="file-thumb" src="{% url 'printer_file_thumbnail' printer.pk f.path %}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></td>
         <td>{{ f.path }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
-        <td class="num">{% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}</td></tr>
+        <td class="num row" style="justify-content:flex-end">
+          {% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" data-busy="Печать ставится…" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}
+          {% if printer|can:"rename_file" %}<form class="inline" method="post" action="{% url 'printer_file_rename' printer.pk %}" data-busy="Переименовывается…">{% csrf_token %}<input type="hidden" name="path" value="{{ f.path }}"><input type="hidden" name="new_name"><button type="button" class="btn sm" data-rename-btn="{{ f.path|basename|escapejs }}">Переименовать</button></form>{% endif %}
+          {% if printer|can:"delete_file" %}<form class="inline" method="post" action="{% url 'printer_file_delete' printer.pk %}" data-busy="Удаляется…" onsubmit="return confirm('Удалить файл «{{ f.path|basename|escapejs }}» с принтера {{ printer.name|escapejs }}? Это необратимо.')">{% csrf_token %}<input type="hidden" name="path" value="{{ f.path }}"><button type="submit" class="btn sm warn">Удалить</button></form>{% endif %}
+        </td></tr>
       {% empty %}<tr><td colspan="5" class="muted">Файлов нет</td></tr>{% endfor %}
     </table></div>{% endif %}
   </div>
@@ -67,7 +100,8 @@
   <tr><th>Начало</th><th>Конец</th><th>Файл</th><th class="num">Время печати</th><th class="num">Пластик</th><th>Результат</th></tr>
   {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|basename }}</td><td class="num">{{ j.print_duration|duration }}</td>
     <td class="num">{% if j.filament_g %}{{ j.filament_g|floatformat:0 }} г{% else %}{{ j.filament_mm|floatformat:0 }} мм{% endif %}</td>
-    <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span></td></tr>
+    <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span>
+      {% if j.quality == "defect" %}<span class="pill c" style="--c:var(--st-err)" title="{{ j.defect_note }}">Брак{% if j.get_defect_reason_display %}: {{ j.get_defect_reason_display }}{% endif %}</span>{% endif %}</td></tr>
   {% empty %}<tr><td colspan="6" class="muted">Заданий с момента подключения пока нет.</td></tr>{% endfor %}
 </table></div>
 

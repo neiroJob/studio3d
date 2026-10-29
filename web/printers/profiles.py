@@ -19,7 +19,7 @@
                     принтер отдаёт только WebRTC-страницу без отдельного снимка, она
                     показывается во фрейме на странице принтера (без миниатюры на плитке
                     дашборда и без записи в таймлапс — это не снимок, а чужая страница)
-    capabilities    что умеет: pause, resume, cancel, start_file, upload, light
+    capabilities    что умеет: pause, resume, cancel, start_file, upload, light, delete_file, rename_file
     light.object    объект Klipper с состоянием света (поле value > 0 — включён)
     light.on_gcode / light.off_gcode  G-code включения и выключения света
                     (не «on/off»: в YAML это читается как true/false)
@@ -31,6 +31,12 @@
     tools           число экструдеров (по умолчанию 1)
     gcode.start_macro   стартовый макрос, который должен быть в начале файла: PRINT_START
     gcode.model_names   как слайсеры пишут эту модель в «; printer_model = …»
+    power_loss_recovery  путь файла восстановления после отключения питания на самом принтере
+                    (например, у QIDI — ".plr/plr.gcode", прошивка сама пишет его при
+                    отключении питания во время печати). Если он появился в списке файлов —
+                    на странице принтера предлагается запустить его как обычный файл. ❓ не
+                    проверено на реальном сценарии потери питания — только то, что принтер
+                    создаёт такую папку (память проекта, printers.md)
 """
 
 from dataclasses import dataclass, field
@@ -40,7 +46,7 @@ from pathlib import Path
 import yaml
 
 BUILTIN_DIR = Path(__file__).resolve().parent / "profiles"
-CAPABILITIES = {"pause", "resume", "cancel", "start_file", "upload", "light"}
+CAPABILITIES = {"pause", "resume", "cancel", "start_file", "upload", "light", "delete_file", "rename_file"}
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,7 @@ class Profile:
     light_on: str = ""
     light_off: str = ""
     light_native_port: int | None = None
+    power_loss_recovery: str = ""
     start_macro: str = ""
     model_names: tuple = ()
     tools: int = 1
@@ -122,6 +129,7 @@ def parse_profile(data, source="?"):
             light_on=str(light.get("on_gcode") or ""),
             light_off=str(light.get("off_gcode") or ""),
             light_native_port=int(light_native_port) if light_native_port else None,
+            power_loss_recovery=str(data.get("power_loss_recovery") or ""),
             start_macro=str(gcode.get("start_macro") or ""),
             model_names=tuple(str(n) for n in (gcode.get("model_names") or [])),
             tools=int(data.get("tools", 1)),

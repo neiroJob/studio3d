@@ -85,6 +85,19 @@ class PrintJob(models.Model):
         INTERRUPTED = "interrupted", "Прервано"
         OTHER = "other", "Другое"
 
+    class Quality(models.TextChoices):
+        OK = "ok", "Без замечаний"
+        DEFECT = "defect", "Брак"
+
+    class DefectReason(models.TextChoices):
+        FILAMENT_RUNOUT = "filament_runout", "Кончился пластик"
+        FILAMENT_TANGLE = "filament_tangle", "Запутался/застрял пластик"
+        ADHESION = "adhesion", "Не прилипло к столу / отвалилось"
+        SHIFTED_LAYERS = "shifted_layers", "Смещение слоёв"
+        CLOG = "clog", "Забилось сопло"
+        POWER_LOSS = "power_loss", "Пропадание питания"
+        OTHER = "other", "Другое"
+
     printer = models.ForeignKey(Printer, on_delete=models.CASCADE, related_name="jobs")
     external_id = models.CharField("ID задания на принтере", max_length=64)
     filename = models.CharField("Файл", max_length=500)
@@ -95,6 +108,13 @@ class PrintJob(models.Model):
     total_duration = models.FloatField("Общее время, с", default=0)
     filament_mm = models.FloatField("Пластик, мм", default=0)
     filament_g = models.FloatField("Пластик, г", null=True, blank=True)
+
+    # Заполняется человеком при снятии изделия (views.plate_cleared) — не связано со status,
+    # который приходит от принтера: напечатано может быть «успешно» (status=completed), но
+    # изделие всё равно оказалось бракованным (отклеилось, сместились слои и т.п.).
+    quality = models.CharField("Качество печати", max_length=16, choices=Quality.choices, blank=True)
+    defect_reason = models.CharField("Причина брака", max_length=32, choices=DefectReason.choices, blank=True)
+    defect_note = models.TextField("Комментарий к браку", blank=True)
 
     class Meta:
         ordering = ["-started_at"]

@@ -21,7 +21,7 @@ build_volume_mm: [220, 220, 250]
 camera:
   type: none
 
-capabilities: [pause, resume, cancel, light, start_file, upload]
+capabilities: [pause, resume, cancel, light, start_file, upload, delete_file, rename_file]
 
 light:
   object: lightSw

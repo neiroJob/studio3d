@@ -1,11 +1,13 @@
 """Этап 3: драйвер creality_native, профиль Creality K1 (WebSocket 9999, без Moonraker)."""
 
 import asyncio
+import time
 
 import pytest
 from django.urls import reverse
 
 from accounts.roles import ROLE_OPERATOR
+from printers import collector
 from printers.drivers import base
 from printers.drivers.creality_native import (
     CrealityNativeClient,
@@ -14,7 +16,7 @@ from printers.drivers.creality_native import (
     normalize,
     parse_firmware,
 )
-from printers.models import Printer
+from printers.models import Printer, PrintJob
 from printers.profiles import get_profile
 
 from .fake_creality import FakeCreality, load_fixture
@@ -45,7 +47,9 @@ def _clear_cache():
 
 def test_k1_profile():
     assert K1.driver == "creality_native" and K1.port == 9999 and K1.verified
-    assert K1.capabilities == {"pause", "resume", "cancel", "light", "start_file", "upload"}
+    assert K1.capabilities == {
+        "pause", "resume", "cancel", "light", "start_file", "upload", "delete_file", "rename_file",
+    }
 
 
 # --- разбор версии прошивки --------------------------------------------------------------
@@ -197,6 +201,17 @@ def test_client_start(fake):
     assert ("set", {"opGcodeFile": "printprt:/usr/data/printer_data/gcodes/a.gcode"}) in fake.received
 
 
+def test_client_delete_and_rename_file(fake):
+    c = CrealityNativeClient("127.0.0.1", fake.port, profile=K1, timeout=5)
+    c.delete_file("/usr/data/printer_data/gcodes/a.gcode")
+    assert ("set", {"opGcodeFile": "deleteprt:/usr/data/printer_data/gcodes/a.gcode"}) in fake.received
+    c.rename_file("/usr/data/printer_data/gcodes/a.gcode", "b.gcode")
+    assert (
+        "set",
+        {"opGcodeFile": "renameprt:/usr/data/printer_data/gcodes/a.gcode:/usr/data/printer_data/gcodes/b.gcode"},
+    ) in fake.received
+
+
 def test_client_upload(fake):
     import io
 
@@ -332,6 +347,53 @@ def test_monitor_job_completed_despite_telemetry_reset_on_finish():
 
     jobs = asyncio.run(scenario())
     assert jobs == [("completed", True, 6500.0, 1300.0)]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_full_print_cycle_sets_awaiting_removal_and_history():
+    """Полный цикл «печать идёт → завершилась» в одном соединении (без обрыва связи) через
+    настоящий PrinterWorker должен писать в историю и выставлять «ждёт снятия» — у K1 это
+    раньше ломалось не только на обрыве связи (lessonslearned № 18), но проверить штатный
+    путь (без обрыва) отдельно важно само по себе."""
+
+    async def scenario(worker):
+        import aiohttp
+
+        fake = FakeCreality()
+        await fake.start_async()
+        try:
+            async with aiohttp.ClientSession() as session:
+                mon = CrealityNativeMonitor("127.0.0.1", fake.port, profile=K1, session=session)
+                task = asyncio.create_task(mon.run(worker.on_state, worker.on_job))
+                for _ in range(50):
+                    if worker.connected:
+                        break
+                    await asyncio.sleep(0.05)
+                await fake.push(
+                    {
+                        "printFileName": "part.gcode",
+                        "printStartTime": time.time() - 600,
+                        "state": 1,
+                        "printProgress": 50,
+                        "usedMaterialLength": 500.0,
+                    }
+                )
+                await asyncio.sleep(0.1)
+                await fake.push({"printProgress": 100, "usedMaterialLength": 1000.0, "printJobTime": 600})
+                await asyncio.sleep(0.2)
+                await fake.close_clients()
+                with pytest.raises(Exception):  # noqa: B017 — обрыв соединения приводит к исключению
+                    await asyncio.wait_for(task, 3)
+        finally:
+            await fake.stop_async()
+
+    printer = Printer.objects.create(name="K1-full", profile_id="creality_k1", host="127.0.0.1", port=1)
+    worker = collector.PrinterWorker(printer, session=None)
+    asyncio.run(scenario(worker))
+    printer.refresh_from_db()
+    assert printer.awaiting_removal is True
+    job = PrintJob.objects.get(printer=printer)
+    assert job.status == "completed"
 
 
 # --- веб: вкладка «Файлы» и превью -----------------------------------------------------------

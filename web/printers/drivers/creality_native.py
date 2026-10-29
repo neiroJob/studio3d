@@ -290,6 +290,17 @@ class CrealityNativeClient(base.BaseClient):
     def thumbnail(self, gcode_filename, timeout=5):
         return fetch_thumbnail(self.host, gcode_filename, port=self.upload_port, timeout=timeout)
 
+    def delete_file(self, path):
+        """Проверено на реальном принтере полным циклом (printers.md)."""
+        self._set(opGcodeFile=f"deleteprt:{path}")
+
+    def rename_file(self, path, new_name):
+        """Команда взята из JS принтера (printers.md: renameprt:<старый путь>:<новый путь>),
+        не проверена «вживую» — как и запуск печати (start()), который взят оттуда же."""
+        directory = path.rsplit("/", 1)[0] if "/" in path else ""
+        new_path = f"{directory}/{new_name}" if directory else new_name
+        self._set(opGcodeFile=f"renameprt:{path}:{new_path}")
+
     def upload(self, fileobj, filename, start=False, progress=None):
         """POST http://{host}:80/upload/{имя} (multipart, поле file). progress(sent, total) по ходу отправки.
 

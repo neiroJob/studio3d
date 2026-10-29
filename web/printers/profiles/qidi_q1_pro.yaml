@@ -18,13 +18,22 @@ build_volume_mm: [245, 258, 248]
 # Объекты Klipper, которые у разных моделей называются по-разному.
 objects:
   chamber: "heater_generic chamber"
+  # Датчик обрыва нити — найден в записи простоя 2026-10-27 (moonraker_dump.py), был выключен
+  # (enabled: false), на реальном обрыве нити не проверялся. ❓
+  filament_sensor: "filament_switch_sensor fila"
 
 camera:
   type: mjpeg_snapshot
   # У QIDI камера не зарегистрирована в Moonraker (server/webcams/list пуст), адрес задаём здесь.
   snapshot_url: "http://{host}:8080/?action=snapshot"
 
-capabilities: [pause, resume, cancel, start_file, upload, light]
+capabilities: [pause, resume, cancel, start_file, upload, light, delete_file, rename_file]
+
+# Файл восстановления печати после отключения питания — прошивка QIDI сама создаёт его в
+# скрытой папке .plr при потере питания во время печати (память проекта, printers.md). ❓ сам
+# факт появления файла при реальной потере питания не проверен — только то, что папка для
+# этого предусмотрена в прошивке.
+power_loss_recovery: ".plr/plr.gcode"
 
 # Подсветка камеры: [output_pin caselight], pwm: false (конфиг QIDI). Объект есть у принтера — запись 2026-10-27.
 light:

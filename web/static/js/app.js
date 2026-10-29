@@ -42,6 +42,26 @@
     else if (document.body.classList.contains("nav-open") && !e.target.closest(".side")) {
       document.body.classList.remove("nav-open");
     }
+    const openDlg = e.target.closest("[data-open-dialog]");
+    if (openDlg) {
+      const d = document.getElementById(openDlg.dataset.openDialog);
+      if (d && d.showModal) d.showModal();
+    }
+    const closeDlg = e.target.closest("[data-close-dialog]");
+    if (closeDlg) {
+      const d = closeDlg.closest("dialog");
+      if (d) d.close();
+    }
+    const renameBtn = e.target.closest("[data-rename-btn]");
+    if (renameBtn) {
+      const current = renameBtn.getAttribute("data-rename-btn");
+      const name = (prompt("Новое имя файла:", current) || "").trim();
+      if (name && name !== current) {
+        const form = renameBtn.closest("form");
+        form.querySelector('input[name="new_name"]').value = name;
+        form.requestSubmit();
+      }
+    }
   });
   document.addEventListener("DOMContentLoaded", function () { apply(current()); });
 })();
@@ -79,6 +99,26 @@
   }
   document.addEventListener("DOMContentLoaded", fitAll);
   window.addEventListener("resize", fitAll);
+})();
+
+// Действия с принтером (пауза, свет, запуск печати, «снял изделие» и т.п.) — обычная отправка
+// формы с полной перезагрузкой страницы, без какой-либо обратной связи до её конца: пользователь
+// не видит, что команда выполняется, и может решить, что ничего не произошло (особенно если
+// принтер отвечает с задержкой — например, K1C долго ставит файл на печать). Помечаем форму
+// data-busy="текст", чтобы при отправке сразу заблокировать кнопку и показать спиннер с этим
+// текстом — до тех пор, пока браузер не уйдёт на следующую страницу (успех) или не перерисует
+// эту же (ошибка), и JS-состояние само не сбросится.
+(function () {
+  document.addEventListener("submit", function (e) {
+    if (e.defaultPrevented) return; // отменено confirm()/другим обработчиком — команда не ушла
+    const form = e.target;
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-busy")) return;
+    const btn = form.querySelector('button[type="submit"]') || form.querySelector("button");
+    if (!btn || btn.disabled) return;
+    btn.textContent = form.getAttribute("data-busy") || "Выполняется…";
+    btn.disabled = true;
+    btn.classList.add("busy");
+  });
 })();
 
 // Форма принтера: производитель → модель; порт и мощность из профиля; наработка из проверки связи.

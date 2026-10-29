@@ -58,6 +58,16 @@ main{padding:22px;max-width:1360px;width:100%}
 .btn.warn{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,var(--line))}
 .btn.sm{padding:4px 9px;font-size:13px}
 .btn:disabled{opacity:.55;cursor:default;filter:none}
+.btn.busy{opacity:.75;cursor:wait;filter:none}
+.btn.busy::after{content:"";display:inline-block;width:11px;height:11px;margin-left:8px;vertical-align:-2px;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:btn-spin .6s linear infinite}
+@keyframes btn-spin{to{transform:rotate(360deg)}}
+dialog.plate-dialog{border:1px solid var(--line);border-radius:12px;padding:20px;max-width:420px;width:90vw;background:var(--panel);color:inherit}
+dialog.plate-dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog.plate-dialog .defect-fields{display:none;margin-top:4px}
+dialog.plate-dialog:has(input[name=quality][value=defect]:checked) .defect-fields{display:block}
+dialog.plate-dialog select,dialog.plate-dialog textarea{width:100%;margin-top:4px}
+dialog.plate-dialog label.check{display:block;margin:6px 0}
 .icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:34px;height:34px;cursor:pointer;display:inline-grid;place-items:center;font-size:16px;line-height:1}
 .top .menu-btn{display:none}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}

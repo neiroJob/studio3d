@@ -17,7 +17,7 @@ from .drivers import DriverError, base, client_for
 from .drivers.moonraker import fetch_snapshot, page_reachable
 from .forms import PrinterForm, UploadForm
 from .gcode_check import check_gcode, read_head_tail
-from .models import Printer
+from .models import Printer, PrintJob
 from .profiles import get_profile, manufacturers
 from .state import read_state, read_states, view_state, write_state
 
@@ -59,7 +59,11 @@ def dashboard_context(request):
     attention = [
         it
         for it in _items(list(Printer.objects.all()))
-        if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED) or it["state"]["heating_idle"]
+        if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED)
+        or it["state"]["heating_idle"]
+        # Печать идёт, но принтер сам сообщил предупреждение (например, датчик нити) —
+        # статус при этом не меняется (unverified-сигнал, печать не останавливаем сами).
+        or (it["state"]["status"] == base.PRINTING and it["state"].get("message"))
     ]
     back = reverse("dashboard") + (f"?f={current}" if current != "all" else "")
     return {"items": items, "strip": strip, "filter": current, "attention": attention, "back": back}
@@ -90,6 +94,7 @@ def detail(request, pk):
         "web_ui": printer.profile.web_ui_for(printer.host) if printer.profile else "",
         "camera_page_url": printer.profile.page_url_for(printer.host) if printer.profile else "",
         "can_control": "print_control" in rights,
+        "defect_reasons": PrintJob.DefectReason.choices,
     }
     if tab == "files":
         if not ctx["can_control"]:
@@ -99,6 +104,13 @@ def detail(request, pk):
         except DriverError as e:
             ctx["files_error"] = str(e)
         ctx["upload_form"] = UploadForm()
+        recovery_path = printer.profile.power_loss_recovery if printer.profile else ""
+        if recovery_path:
+            try:
+                if client_for(printer).file_exists(recovery_path):
+                    ctx["recovery_file"] = recovery_path
+            except DriverError:
+                pass
     elif tab == "history":
         ctx["jobs"] = printer.jobs.all()[:100]
     elif tab == "hours":
@@ -255,8 +267,33 @@ def plate_cleared(request, pk):
     printer = get_object_or_404(Printer, pk=pk)
     printer.awaiting_removal = False
     printer.save(update_fields=["awaiting_removal"])
-    audit.log(request, audit.Action.PLATE_CLEARED, target=printer.name)
-    messages.success(request, f"{printer.name}: изделие снято, принтер готов.")
+
+    quality = request.POST.get("quality") or ""
+    if quality not in PrintJob.Quality.values:
+        quality = ""
+    defect_reason = request.POST.get("defect_reason") or ""
+    if defect_reason not in PrintJob.DefectReason.values:
+        defect_reason = ""
+    defect_note = request.POST.get("defect_note", "").strip()
+    # Последнее завершённое задание без оценки — то самое, что только что сняли со стола.
+    job = printer.jobs.filter(status=PrintJob.Status.COMPLETED, quality="").order_by("-ended_at").first()
+    if quality and job:
+        job.quality = quality
+        job.defect_reason = defect_reason if quality == PrintJob.Quality.DEFECT else ""
+        job.defect_note = defect_note if quality == PrintJob.Quality.DEFECT else ""
+        job.save(update_fields=["quality", "defect_reason", "defect_note"])
+
+    audit.log(
+        request,
+        audit.Action.PLATE_CLEARED,
+        target=printer.name,
+        quality=quality,
+        defect_reason=defect_reason if quality == PrintJob.Quality.DEFECT else "",
+    )
+    if quality == PrintJob.Quality.DEFECT:
+        messages.success(request, f"{printer.name}: изделие снято, брак отмечен, принтер готов.")
+    else:
+        messages.success(request, f"{printer.name}: изделие снято, принтер готов.")
     return _redirect_back(request, printer)
 
 
@@ -396,6 +433,52 @@ def upload_progress(request, pk, upload_id):
     if not UPLOAD_ID_RE.match(upload_id):
         return JsonResponse({}, status=404)
     return JsonResponse(cache.get(_upload_key(pk, upload_id)) or {})
+
+
+NEW_FILENAME_RE = re.compile(r"^[^/\\]+\.(gcode|gco|g)$", re.IGNORECASE)
+
+
+@right_required("print_control")
+@require_POST
+def file_delete(request, pk):
+    printer = get_object_or_404(Printer, pk=pk)
+    path = request.POST.get("path", "")
+    target = reverse("printer_detail", args=[pk]) + "?tab=files"
+    if not printer.can("delete_file") or not path:
+        messages.error(request, "Удаление файлов недоступно.")
+    else:
+        try:
+            client_for(printer).delete_file(path)
+        except DriverError as e:
+            messages.error(request, f"{printer.name}: {e}")
+        else:
+            audit.log(request, audit.Action.FILE_DELETE, target=printer.name, filename=path)
+            messages.success(request, f"{printer.name}: файл «{path.rsplit('/', 1)[-1]}» удалён.")
+    return redirect(target)
+
+
+@right_required("print_control")
+@require_POST
+def file_rename(request, pk):
+    printer = get_object_or_404(Printer, pk=pk)
+    path = request.POST.get("path", "")
+    new_name = request.POST.get("new_name", "").strip()
+    target = reverse("printer_detail", args=[pk]) + "?tab=files"
+    if not printer.can("rename_file") or not path:
+        messages.error(request, "Переименование файлов недоступно.")
+    elif not NEW_FILENAME_RE.match(new_name):
+        messages.error(request, "Укажите новое имя файла с расширением .gcode/.gco/.g, без пути.")
+    else:
+        try:
+            client_for(printer).rename_file(path, new_name)
+        except DriverError as e:
+            messages.error(request, f"{printer.name}: {e}")
+        else:
+            audit.log(
+                request, audit.Action.FILE_RENAME, target=printer.name, filename=path, new_name=new_name
+            )
+            messages.success(request, f"{printer.name}: файл переименован в «{new_name}».")
+    return redirect(target)
 
 
 # --- добавление и настройки -------------------------------------------------------------------

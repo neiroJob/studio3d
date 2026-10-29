@@ -42,6 +42,9 @@ def subscribe_objects(profile):
         objects[chamber] = TEMP_FIELDS
     if profile and profile.light_object:
         objects[profile.light_object] = ["value"]
+    filament_sensor = (profile.objects.get("filament_sensor") if profile else None) or ""
+    if filament_sensor:
+        objects[filament_sensor] = ["filament_detected", "enabled"]
     return objects
 
 
@@ -144,6 +147,17 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
     light = None
     if profile and profile.light_object and isinstance(status.get(profile.light_object), dict):
         light = float(status[profile.light_object].get("value") or 0) > 0
+
+    # Датчик обрыва нити (profile.objects.filament_sensor, Klipper filament_switch_sensor) —
+    # не останавливает печать сам, просто предупреждаем: принтер может считать, что печатает,
+    # пока пластик на самом деле не подаётся (запутался на катушке, застрял и т.п.).
+    filament_name = (profile.objects.get("filament_sensor") if profile else None) or ""
+    if filament_name and result in (base.PRINTING, base.PAUSED):
+        sensor = status.get(filament_name) or {}
+        if sensor.get("enabled") and sensor.get("filament_detected") is False:
+            warning = "Датчик нити: пластик не подаётся (обрыв, конец прутка или застрял)."
+            message = f"{message} {warning}".strip() if message else warning
+
     return {"status": result, "message": message, "temps": temps, "job": job, "light": light, "updated": now}
 
 
@@ -348,6 +362,13 @@ class MoonrakerClient(base.BaseClient):
     def file_metadata(self, filename):
         return self.get("/server/files/metadata", filename=filename) or {}
 
+    def file_exists(self, path):
+        try:
+            self.file_metadata(path)
+            return True
+        except base.DriverError:
+            return False
+
     def thumbnail(self, filename, timeout=5):
         """Превью модели из метаданных G-code (server/files/metadata → thumbnails[]).
 
@@ -408,6 +429,18 @@ class MoonrakerClient(base.BaseClient):
         if resp.status_code >= 400:
             raise base.DriverError(f"Принтер не принял файл (HTTP {resp.status_code})")
         return resp.json().get("result")
+
+    def delete_file(self, path):
+        self._request("DELETE", "/server/files/gcodes/" + urllib.parse.quote(path))
+
+    def rename_file(self, path, new_name):
+        directory = path.rsplit("/", 1)[0] if "/" in path else ""
+        dest = f"{directory}/{new_name}" if directory else new_name
+        self._request(
+            "POST",
+            "/server/files/move",
+            json={"source": f"gcodes/{path}", "dest": f"gcodes/{dest}"},
+        )
 
 
 def fetch_snapshot(url, timeout=5):

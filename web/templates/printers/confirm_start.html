@@ -8,7 +8,7 @@
   <p class="small muted" style="margin-top:12px">Надёжнее перенарезать модель в слайсере с профилем {{ printer.profile.title }}. Если вы уверены, что файл подходит, его можно запустить.</p>
   <div class="form-actions">
     <a class="btn pri" href="{% url 'printer_detail' printer.pk %}?tab=files">Не запускать</a>
-    <form class="inline" method="post" action="{% url 'printer_start' printer.pk %}">{% csrf_token %}
+    <form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" data-busy="Печать ставится…">{% csrf_token %}
       <input type="hidden" name="filename" value="{{ filename }}"><input type="hidden" name="confirm" value="1">
       <button class="btn warn" type="submit">Всё равно запустить</button></form>
   </div>

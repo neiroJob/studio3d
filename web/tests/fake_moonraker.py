@@ -24,6 +24,7 @@ class FakeMoonraker:
         self.calls = []
         self.uploads = []
         self.gcode_files = {}
+        self.missing_files = set()  # имена файлов, для которых metadata() отвечает «не найден»
         self.command_override = (
             None  # подмена ответа на /printer/print/cancel  # путь → bytes, для /server/files/gcodes/<путь>
         )
@@ -62,6 +63,8 @@ class FakeMoonraker:
         return self._ok(self.data["files"])
 
     async def metadata(self, request):
+        if request.query.get("filename") in self.missing_files:
+            return web.json_response({"error": {"code": 404, "message": "not found"}}, status=404)
         return self._ok(self.data["metadata"])
 
     async def command(self, request):
@@ -77,6 +80,15 @@ class FakeMoonraker:
         return web.json_response(
             {"result": {"item": {"path": f.filename}, "print_started": bool(form.get("print"))}}
         )
+
+    async def delete_file(self, request):
+        self.calls.append(("DELETE", request.match_info["path"]))
+        return self._ok("ok")
+
+    async def move_file(self, request):
+        data = await request.json()
+        self.calls.append(("move", data))
+        return self._ok("ok")
 
     async def gcode_file(self, request):
         data = self.gcode_files.get(request.match_info["path"])
@@ -130,6 +142,8 @@ class FakeMoonraker:
         app.router.add_get("/server/files/metadata", self.metadata)
         app.router.add_post("/server/files/upload", self.upload)
         app.router.add_get("/server/files/gcodes/{path:.*}", self.gcode_file)
+        app.router.add_delete("/server/files/gcodes/{path:.*}", self.delete_file)
+        app.router.add_post("/server/files/move", self.move_file)
         for name in ("pause", "resume", "cancel", "start"):
             app.router.add_post(f"/printer/print/{name}", self.command)
         app.router.add_post("/printer/gcode/script", self.command)

@@ -18,18 +18,18 @@
   {% else %}<p class="muted" style="margin:0">Сейчас ничего не печатается.</p>{% endif %}
   <div class="acts">
     {% if can_control %}
-      {% if s.status == "printing" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'pause' %}">{% csrf_token %}<button class="btn">Пауза</button></form>{% endif %}
-      {% if s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'resume' %}">{% csrf_token %}<button class="btn">Продолжить</button></form>{% endif %}
-      {% if s.status == "printing" or s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'cancel' %}" onsubmit="return confirm('Отменить печать на {{ p.name|escapejs }}? Продолжить её будет нельзя.')">{% csrf_token %}<button class="btn warn">Отменить печать</button></form>{% endif %}
+      {% if s.status == "printing" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'pause' %}" data-busy="Ставится на паузу…">{% csrf_token %}<button class="btn">Пауза</button></form>{% endif %}
+      {% if s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'resume' %}" data-busy="Печать продолжается…">{% csrf_token %}<button class="btn">Продолжить</button></form>{% endif %}
+      {% if s.status == "printing" or s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'cancel' %}" data-busy="Отменяется…" onsubmit="return confirm('Отменить печать на {{ p.name|escapejs }}? Продолжить её будет нельзя.')">{% csrf_token %}<button class="btn warn">Отменить печать</button></form>{% endif %}
       {% if s.status == "ready" %}<a class="btn pri" href="?tab=files">Поставить на печать</a>{% endif %}
     {% endif %}
-    {% if s.status == "finished" and "print_plate" in rights %}<form class="inline" method="post" action="{% url 'printer_cleared' p.pk %}">{% csrf_token %}<button class="btn pri">Снял изделие</button></form>{% endif %}
+    {% if s.status == "finished" and "print_plate" in rights %}<button type="button" class="btn pri" data-open-dialog="plate-dialog-{{ p.pk }}">Снял изделие</button>{% endif %}
   </div>
 </div>
 {% if s.heating_idle %}
 <div class="panel" style="border-color:var(--st-pause)">
   <div class="row"><span><b>Нагрев включён без печати:</b> {{ s.heating_idle|join:", " }}.</span><span class="spacer"></span>
-  {% if can_control %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'heaters_off' %}">{% csrf_token %}<button class="btn sm warn">Выключить нагрев</button></form>{% endif %}</div>
+  {% if can_control %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'heaters_off' %}" data-busy="Выключаются нагреватели…">{% csrf_token %}<button class="btn sm warn">Выключить нагрев</button></form>{% endif %}</div>
   <p class="hint" style="margin:6px 0 0">Такое бывает, если макрос отмены или завершения на принтере оборвался с ошибкой. Если нагрев включили намеренно, можно не обращать внимания.</p>
 </div>
 {% endif %}
@@ -38,10 +38,10 @@
   <span>Свет в принтере{% if s.light is not None %}: <b>{% if s.light %}включён{% else %}выключен{% endif %}</b>{% endif %}</span><span class="spacer"></span>
   {% if can_control %}
     {% if s.light is not None %}
-      <form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}">{% csrf_token %}<button class="btn sm">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk s.light|yesno:'off,on' %}" data-busy="Свет переключается…">{% csrf_token %}<button class="btn sm">{% if s.light %}Выключить свет{% else %}Включить свет{% endif %}</button></form>
     {% else %}
-      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'on' %}">{% csrf_token %}<button class="btn sm">Включить свет</button></form>
-      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'off' %}">{% csrf_token %}<button class="btn sm">Выключить свет</button></form>
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'on' %}" data-busy="Свет переключается…">{% csrf_token %}<button class="btn sm">Включить свет</button></form>
+      <form class="inline" method="post" action="{% url 'printer_light' p.pk 'off' %}" data-busy="Свет переключается…">{% csrf_token %}<button class="btn sm">Выключить свет</button></form>
     {% endif %}
   {% endif %}
 </div>

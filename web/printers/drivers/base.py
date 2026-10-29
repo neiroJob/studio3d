@@ -87,6 +87,17 @@ class BaseClient:
         """progress(sent, total) — по мере отправки на принтер."""
         raise NotImplementedError
 
+    def delete_file(self, path):
+        raise NotImplementedError
+
+    def rename_file(self, path, new_name):
+        """new_name — новое имя файла (без пути: остаётся в той же папке, где лежал path)."""
+        raise NotImplementedError
+
+    def file_exists(self, path):
+        """Есть ли файл с принтера по точному пути. По умолчанию — нет способа проверить."""
+        return False
+
 
 class BaseMonitor:
     """Постоянное соединение с принтером в коллекторе.

@@ -10,6 +10,7 @@ from asgiref.sync import async_to_sync
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.roles import ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR
 from core.models import AuditLog
@@ -147,6 +148,29 @@ def test_normalize_states():
     assert normalize({}, connected=False)["status"] == base.OFFLINE
 
 
+def test_normalize_warns_on_filament_sensor_runout():
+    """Датчик обрыва нити (profile.objects.filament_sensor, Q1 Pro — filament_switch_sensor fila):
+    принтер может считать, что печатает, хотя пластик на самом деле не подаётся."""
+    st = {
+        "webhooks": {"state": "ready"},
+        "print_stats": {"state": "printing", "filename": "a.gcode"},
+        "filament_switch_sensor fila": {"enabled": True, "filament_detected": False},
+    }
+    printing = normalize(st, profile=Q1)
+    assert printing["status"] == base.PRINTING and "датчик нити" in printing["message"].lower()
+
+    # датчик выключен или нить есть — предупреждения нет
+    st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": False}
+    assert normalize(st, profile=Q1)["message"] == ""
+    st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": True}
+    assert normalize(st, profile=Q1)["message"] == ""
+
+    # не печатает — датчик не проверяется
+    st["print_stats"] = {"state": "standby"}
+    st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": False}
+    assert normalize(st, profile=Q1)["message"] == ""
+
+
 def test_job_from_history_grams():
     done = job_from_history(
         {
@@ -191,6 +215,40 @@ def test_client_check_and_commands(fake):
     assert ("/printer/print/start", {"filename": "cube.gcode"}) in fake.calls
     c.upload(io.BytesIO(b"G28\n"), "test.gcode", start=True)
     assert fake.uploads == [{"filename": "test.gcode", "size": 4, "print": "true"}]
+
+
+def test_client_delete_and_rename_file(fake):
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=Q1)
+    c.delete_file("cube.gcode")
+    assert ("DELETE", "cube.gcode") in fake.calls
+    c.rename_file("sub/cube.gcode", "cube2.gcode")
+    assert ("move", {"source": "gcodes/sub/cube.gcode", "dest": "gcodes/sub/cube2.gcode"}) in fake.calls
+    c.rename_file("cube.gcode", "cube3.gcode")  # без подпапки — переименование в корне
+    assert ("move", {"source": "gcodes/cube.gcode", "dest": "gcodes/cube3.gcode"}) in fake.calls
+
+
+def test_client_file_exists(fake):
+    c = MoonrakerClient("127.0.0.1", fake.port, profile=Q1)
+    assert c.file_exists("gear_z24.gcode") is True
+    fake.missing_files.add(".plr/plr.gcode")
+    assert c.file_exists(".plr/plr.gcode") is False
+
+
+@pytest.mark.django_db
+def test_files_tab_shows_power_loss_recovery_when_file_present(client, fake):
+    """QIDI Q1 Pro: если принтер сам создал .plr/plr.gcode (потеря питания во время печати),
+    на вкладке «Файлы» должна появиться возможность его запустить (lessonslearned/ТЗ про
+    восстановление после аварийных ситуаций — ❓ сам файл не проверен на реальной потере питания)."""
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer(port=fake.port)
+    write_state(p.pk, {"status": base.READY, "temps": {}, "job": None, "updated": time.time()})
+    login(client, "sergey")
+    html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
+    assert "Восстановить печать" in html
+
+    fake.missing_files.add(".plr/plr.gcode")
+    html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
+    assert "Восстановить печать" not in html
 
 
 def test_client_thumbnail(fake):
@@ -405,6 +463,62 @@ def test_collector_recovers_job_lost_in_connection_gap():
     assert PrintJob.objects.filter(printer=printer3).count() == 0
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "creality_k1c"])
+def test_full_print_cycle_sets_awaiting_removal_and_history_moonraker(profile_id):
+    """Полный цикл «печать идёт → завершилась» через настоящий PrinterWorker (не только через
+    on_job напрямую) должен писать в историю и выставлять «ждёт снятия» — для обоих профилей
+    на драйвере moonraker, не только для того, на котором баг не проявлялся (K1C)."""
+
+    async def scenario(worker):
+        import aiohttp
+
+        fake = FakeMoonraker()
+        await fake.start_async()
+        try:
+            async with aiohttp.ClientSession() as session:
+                mon = MoonrakerMonitor(
+                    "127.0.0.1", fake.port, profile=get_profile(profile_id), session=session
+                )
+                task = asyncio.create_task(mon.run(worker.on_state, worker.on_job, history_since=1e12))
+                for _ in range(50):
+                    if worker.connected:
+                        break
+                    await asyncio.sleep(0.05)
+                await fake.notify("notify_status_update", [{"print_stats": {"state": "printing"}}, 2.0])
+                await asyncio.sleep(0.1)
+                await fake.notify(
+                    "notify_history_changed",
+                    [
+                        {
+                            "action": "finished",
+                            "job": {
+                                "job_id": "FULLCYCLE1",
+                                "filename": "part.gcode",
+                                "status": "completed",
+                                "start_time": time.time() - 600,
+                                "end_time": time.time(),
+                                "print_duration": 600.0,
+                            },
+                        }
+                    ],
+                )
+                await asyncio.sleep(0.2)
+                await fake.close_clients()
+                with pytest.raises(Exception):  # noqa: B017 — обрыв соединения приводит к исключению
+                    await asyncio.wait_for(task, 3)
+        finally:
+            await fake.stop_async()
+
+    printer = make_printer(name=f"full-{profile_id}", profile_id=profile_id, port=1)
+    worker = collector.PrinterWorker(printer, session=None)
+    asyncio.run(scenario(worker))
+    printer.refresh_from_db()
+    assert printer.awaiting_removal is True
+    job = PrintJob.objects.get(printer=printer, external_id="FULLCYCLE1")
+    assert job.status == "completed"
+
+
 # --- веб: права, добавление, команды ----------------------------------------------------------
 
 
@@ -469,6 +583,27 @@ def test_dashboard_shows_live_state(client):
 
 
 @pytest.mark.django_db
+def test_dashboard_attention_shows_printing_with_warning_message(client):
+    """Печать идёт, но принтер предупредил (например, датчик нити) — попадает в «Требует
+    внимания», хотя статус остаётся «printing» (саму печать мы не останавливаем)."""
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer()
+    write_state(
+        p.pk,
+        {
+            "status": base.PRINTING,
+            "message": "Датчик нити: пластик не подаётся.",
+            "temps": {},
+            "job": {"filename": "a.gcode", "progress": 0.5},
+            "updated": time.time(),
+        },
+    )
+    login(client, "sergey")
+    html = client.get(reverse("printer_tiles")).content.decode()
+    assert "Датчик нити" in html
+
+
+@pytest.mark.django_db
 def test_rights_for_commands(client, fake):
     make_user("anna", ROLE_MANAGER)
     make_user("sergey", ROLE_OPERATOR)
@@ -499,6 +634,50 @@ def test_start_blocked_until_plate_cleared(client, fake):
     assert ("/printer/print/start", {"filename": "cube.gcode"}) in fake.calls
 
 
+@pytest.mark.django_db(transaction=True)
+def test_plate_cleared_records_quality_and_defect_reason(client, fake):
+    """«Снял изделие» теперь — не просто снятие флага: всплывающее окно может отметить брак
+    с причиной, записывается на последнее завершённое задание без оценки."""
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer(port=fake.port, awaiting_removal=True)
+    job = PrintJob.objects.create(
+        printer=p,
+        external_id="J1",
+        filename="part.gcode",
+        status=PrintJob.Status.COMPLETED,
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+    )
+    login(client, "sergey")
+    client.post(
+        reverse("printer_cleared", args=[p.pk]),
+        {"quality": "defect", "defect_reason": "filament_tangle", "defect_note": "запуталась нить на катушке"},
+    )
+    p.refresh_from_db()
+    job.refresh_from_db()
+    assert p.awaiting_removal is False
+    assert job.quality == "defect"
+    assert job.defect_reason == "filament_tangle"
+    assert job.defect_note == "запуталась нить на катушке"
+
+    # вторая печать без брака — отмечается отдельно, прошлая запись не трогается
+    p.awaiting_removal = True
+    p.save(update_fields=["awaiting_removal"])
+    job2 = PrintJob.objects.create(
+        printer=p,
+        external_id="J2",
+        filename="part2.gcode",
+        status=PrintJob.Status.COMPLETED,
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+    )
+    client.post(reverse("printer_cleared", args=[p.pk]), {"quality": "ok"})
+    job.refresh_from_db()
+    job2.refresh_from_db()
+    assert job2.quality == "ok" and job2.defect_reason == ""
+    assert job.quality == "defect"  # предыдущая оценка не перезаписана
+
+
 @pytest.mark.django_db
 def test_files_tab_and_upload(client, fake):
     make_user("sergey", ROLE_OPERATOR)
@@ -518,6 +697,29 @@ def test_files_tab_and_upload(client, fake):
         reverse("printer_upload", args=[p.pk]), {"file": SimpleUploadedFile("x.stl", b"solid")}, follow=True
     )
     assert "Нужен файл G-code" in bad.content.decode()
+
+
+@pytest.mark.django_db
+def test_files_tab_delete_and_rename_buttons_and_views(client, fake):
+    make_user("sergey", ROLE_OPERATOR)
+    p = make_printer(port=fake.port)
+    write_state(p.pk, {"status": base.READY, "temps": {}, "job": None, "updated": time.time()})
+    login(client, "sergey")
+    html = client.get(reverse("printer_detail", args=[p.pk]) + "?tab=files").content.decode()
+    assert "Удалить" in html and "Переименовать" in html
+
+    client.post(reverse("printer_file_delete", args=[p.pk]), {"path": "cube.gcode"})
+    assert ("DELETE", "cube.gcode") in fake.calls
+    assert AuditLog.objects.filter(action="file_delete", username="sergey").exists()
+
+    client.post(reverse("printer_file_rename", args=[p.pk]), {"path": "cube.gcode", "new_name": "cube2.gcode"})
+    assert ("move", {"source": "gcodes/cube.gcode", "dest": "gcodes/cube2.gcode"}) in fake.calls
+    assert AuditLog.objects.filter(action="file_rename", username="sergey").exists()
+
+    bad = client.post(
+        reverse("printer_file_rename", args=[p.pk]), {"path": "cube.gcode", "new_name": "../cube.gcode"}, follow=True
+    )
+    assert "Укажите новое имя файла" in bad.content.decode()
 
 
 @pytest.mark.django_db
