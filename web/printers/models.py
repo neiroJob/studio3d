@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Sum
@@ -123,3 +124,31 @@ class PrintJob(models.Model):
 
     def __str__(self):
         return f"{self.printer} · {self.filename}"
+
+
+class PrinterFault(models.Model):
+    """Fault messages remain visible until a user confirms they have acted."""
+
+    printer = models.ForeignKey(Printer, on_delete=models.CASCADE, related_name="fault_events")
+    message = models.TextField("Сообщение неисправности")
+    first_seen = models.DateTimeField("Впервые замечено", auto_now_add=True)
+    last_seen = models.DateTimeField("Последний раз замечено", auto_now=True)
+    active = models.BooleanField("Сейчас приходит от принтера", default=True)
+    acknowledged_at = models.DateTimeField("Подтверждено пользователем", null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_printer_faults",
+    )
+
+    class Meta:
+        ordering = ["first_seen", "pk"]
+        indexes = [
+            models.Index(fields=["printer", "acknowledged_at"], name="printer_fault_pending_idx"),
+            models.Index(fields=["printer", "active"], name="printer_fault_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.printer}: {self.message[:100]}"

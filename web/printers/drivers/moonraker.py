@@ -152,9 +152,14 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
     # не останавливает печать сам, просто предупреждаем: принтер может считать, что печатает,
     # пока пластик на самом деле не подаётся (запутался на катушке, застрял и т.п.).
     filament_name = (profile.objects.get("filament_sensor") if profile else None) or ""
+    sensor = (status.get(filament_name) or {}) if filament_name else {}
+    detected = sensor.get("filament_detected")
+    filament = {
+        "present": detected if isinstance(detected, bool) else None,
+        "enabled": sensor.get("enabled") if isinstance(sensor.get("enabled"), bool) else None,
+    }
     if filament_name and result in (base.PRINTING, base.PAUSED):
-        sensor = status.get(filament_name) or {}
-        if sensor.get("enabled") and sensor.get("filament_detected") is False:
+        if filament["enabled"] and filament["present"] is False:
             warning = "Датчик нити: пластик не подаётся (обрыв, конец прутка или застрял)."
             message = f"{message} {warning}".strip() if message else warning
 
@@ -162,6 +167,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
         "status": result,
         "message": message,
         "faults": [message] if message else [],
+        "filament": filament,
         "temps": temps,
         "job": job,
         "light": light,
@@ -472,7 +478,6 @@ def page_reachable(url, timeout=5):
     return resp.status_code == 200
 
 
-UNKNOWN_CMD_RE = re.compile(r'Unknown command:\s*"?([^"\s]+)"?', re.IGNORECASE)
 SKIP_RESPONSES = ("ok", "B:", "T:", "// Klipper state")
 
 
@@ -484,8 +489,12 @@ def keep_response(line):
 
 def _is_fault_response(line):
     return bool(
-        re.match(r"^!!\s|^//\s*Unknown command", line, re.IGNORECASE)
-        or re.search(r"\b(?:error|failed|failure|fault|shutdown|lost communication)\b", line, re.IGNORECASE)
+        re.match(r"^!{1,2}\s", line, re.IGNORECASE)
+        or re.search(
+            r"\b(?:error|failed|failure|fault|shutdown|lost communication|communication timeout|timeout|cannot be run)\b",
+            line,
+            re.IGNORECASE,
+        )
     )
 
 
@@ -493,23 +502,13 @@ def decorate(state, console, fault_messages=None):
     """Добавить к состоянию последние сообщения принтера и вывод о незнакомых командах."""
     lines = [c for c in console]
     state["console"] = lines[-20:]
-    faults = list(state.get("faults") or [])
+    faults = [fault for fault in state.get("faults") or [] if base.show_fault_on_dashboard(fault)]
     candidates = lines if fault_messages is None else fault_messages
     for line in candidates:
-        if line and (fault_messages is not None or _is_fault_response(line)):
+        if line and base.show_fault_on_dashboard(line) and (fault_messages is not None or _is_fault_response(line)):
             if line not in faults:
                 faults.append(line)
     state["faults"] = faults
-    if state.get("status") == base.ERROR:
-        unknown = list(dict.fromkeys(m.group(1) for c in lines for m in [UNKNOWN_CMD_RE.search(c)] if m))
-        if unknown:
-            message = (state.get("message") or "").rstrip()
-            if message and not message.endswith("."):
-                message += "."
-            state["message"] = message + (
-                f" Принтер не знает команд из файла: {', '.join(unknown)} — "
-                "скорее всего, файл нарезан под другой принтер."
-            )
     return state
 
 

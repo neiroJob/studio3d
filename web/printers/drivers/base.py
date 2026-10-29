@@ -6,6 +6,7 @@
       "status": "offline|ready|printing|paused|error",   # «завершено» и «обслуживание» добавляет веб
       "message": "текст ошибки или пусто",
       "faults": [str, ...],  # все доступные сообщения об ошибках/предупреждениях
+      "filament": {"present": bool|None, "enabled": bool|None},  # None — нет достоверного датчика
       "temps": {"nozzle": [тек, цель], "bed": [тек, цель], "chamber": [тек, цель] | None},
       "job": None | {
           "filename": str, "progress": 0..1, "layer": int|None, "total_layers": int|None,
@@ -14,6 +15,8 @@
       "updated": unix time,
     }
 """
+
+import re
 
 OFFLINE = "offline"
 READY = "ready"
@@ -33,6 +36,13 @@ STATUS_LABELS = {
     MAINTENANCE: "Обслуживание",
 }
 
+_IGNORED_DASHBOARD_FAULT = re.compile(r"^\s*(?://\s*)?Unknown command\b", re.IGNORECASE)
+
+
+def show_fault_on_dashboard(message):
+    """Unknown-command notices remain in console logs but are not printer faults."""
+    return bool(message) and not _IGNORED_DASHBOARD_FAULT.match(str(message))
+
 
 class DriverError(Exception):
     """Принтер не ответил или ответил ошибкой. Текст — для пользователя."""
@@ -43,6 +53,7 @@ def offline_state(message="", updated=0.0):
         "status": OFFLINE,
         "message": message,
         "faults": [],
+        "filament": {"present": None, "enabled": None},
         "temps": {},
         "job": None,
         "updated": updated,

@@ -1,7 +1,10 @@
 {% load printers_tags %}{% with s=state p=printer %}
 <div class="panel" style="--c:var({{ s.color }})">
   <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
-  {% if s.message %}<div class="msg error" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
+  {% if s.faults %}<div class="msg error" style="margin-bottom:10px"><b>Неисправности</b>{% for fault in s.faults %}<div>{{ fault }}</div>{% endfor %}
+    {% if can_control %}<form method="post" action="{% url 'printer_faults_acknowledge' p.pk %}" style="margin-top:8px">{% csrf_token %}<button class="btn sm warn">Я увидел и принял меры</button></form>{% endif %}
+  </div>{% elif s.message %}<div class="msg error" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
+  <dl class="kv"><dt>Пластик в тракте</dt><dd>{% if s.filament.present == True %}есть{% elif s.filament.present == False %}нет{% else %}нет данных от датчика{% endif %}{% if s.filament.enabled == False %} (датчик отключён){% endif %}</dd></dl>
   {% if s.job and s.status == "error" %}
     <dl class="kv"><dt>Файл</dt><dd>{{ s.job.filename|basename }}</dd></dl>
   {% elif s.job %}

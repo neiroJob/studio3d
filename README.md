@@ -29,7 +29,8 @@ own server inside the studio network — no cloud account, no subscription, noth
 >   electricity tariffs, audit log, daily database backups;
 > - printers: adding a printer, live dashboard, printer card with camera and light, pause / resume / cancel,
 >   start a file, G-code upload with progress and compatibility check, model thumbnails, job history,
->   machine hours, Klipper messages.
+>   machine hours, filament-presence reporting, and printer faults that stay visible through restarts until acknowledged.
+>   Informational `// Unknown command` notices stay in the diagnostic console and are omitted from dashboard cards.
 >
 > Verified on real hardware: **QIDI Q1 Pro** and **Creality K1C** (Moonraker), **Creality K1** (native
 > WebSocket). **QIDI Plus 4** is partially verified: connection, camera, light and file actions work; motion controls

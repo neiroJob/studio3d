@@ -17,7 +17,7 @@ from core.models import AuditLog
 from printers import collector
 from printers.drivers import base
 from printers.drivers.moonraker import MoonrakerClient, MoonrakerMonitor, job_from_history, normalize
-from printers.models import Printer, PrintJob
+from printers.models import Printer, PrinterFault, PrintJob
 from printers.profiles import get_profile
 from printers.state import read_state, view_state, write_state
 
@@ -158,12 +158,19 @@ def test_normalize_warns_on_filament_sensor_runout():
     }
     printing = normalize(st, profile=Q1)
     assert printing["status"] == base.PRINTING and "датчик нити" in printing["message"].lower()
+    assert printing["filament"] == {"present": False, "enabled": True}
 
     # датчик выключен или нить есть — предупреждения нет
     st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": False}
     assert normalize(st, profile=Q1)["message"] == ""
     st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": True}
     assert normalize(st, profile=Q1)["message"] == ""
+    assert normalize(st, profile=Q1)["filament"] == {"present": True, "enabled": True}
+
+    plus4 = get_profile("qidi_plus_4")
+    st["print_stats"] = {"state": "standby"}
+    st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": True}
+    assert normalize(st, profile=plus4)["filament"] == {"present": True, "enabled": False}
 
     # не печатает — датчик не проверяется
     st["print_stats"] = {"state": "standby"}
@@ -608,7 +615,8 @@ def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
     make_user("sergey", ROLE_OPERATOR)
     moonraker = make_printer()
     creality = Printer.objects.create(name="K1-01", profile_id="creality_k1", host="127.0.0.1", port=9999)
-    moonraker_faults = ["Датчик нити: пластик не подаётся.", "Moonraker second warning is retained"]
+    ignored_notice = '// Unknown command:"HARMONIC_NO_ALIGN"'
+    moonraker_faults = ["Датчик нити: пластик не подаётся.", "Moonraker second warning is retained", ignored_notice]
     creality_fault = "Creality fault: " + "detailed message " * 20
     write_state(
         moonraker.pk,
@@ -616,6 +624,8 @@ def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
             "status": base.PRINTING,
             "message": moonraker_faults[0],
             "faults": moonraker_faults,
+            "console": [ignored_notice],
+            "filament": {"present": True, "enabled": False},
             "temps": {},
             "job": {"filename": "a.gcode", "progress": 0.5},
             "updated": time.time(),
@@ -626,7 +636,7 @@ def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
         {
             "status": base.ERROR,
             "message": creality_fault,
-            "faults": [creality_fault],
+            "faults": [creality_fault, ignored_notice],
             "temps": {},
             "job": None,
             "updated": time.time(),
@@ -634,8 +644,35 @@ def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
     )
     login(client, "sergey")
     html = client.get(reverse("printer_tiles")).content.decode()
-    assert all(fault in html for fault in moonraker_faults)
+    assert all(fault in html for fault in moonraker_faults[:2])
     assert creality_fault in html
+    assert ignored_notice not in html
+    assert "Пластик: есть" in html
+    assert "нет данных от датчика" in html
+
+
+@pytest.mark.django_db
+def test_fault_messages_stay_until_user_acknowledges_after_restart(client):
+    user = make_user("sergey", ROLE_OPERATOR)
+    printer = make_printer()
+    fault_messages = ["! Communication timeout during homing probe", "!! SDCARD_RESET_FILE cannot be run from the sdcard"]
+
+    write_state(
+        printer.pk,
+        {"status": base.ERROR, "message": fault_messages[0], "faults": fault_messages, "temps": {}, "job": None},
+    )
+    write_state(printer.pk, {"status": base.READY, "message": "", "faults": [], "temps": {}, "job": None})
+    assert view_state(printer, read_state(printer.pk))["faults"] == fault_messages
+
+    login(client, "sergey")
+    response = client.post(reverse("printer_faults_acknowledge", args=[printer.pk]))
+    assert response.status_code == 302
+    assert list(printer.fault_events.filter(acknowledged_by=user).values_list("message", flat=True)) == fault_messages
+    assert view_state(printer, read_state(printer.pk))["faults"] == []
+
+    # A continued active report stays acknowledged; a later recurrence after it clears is new.
+    write_state(printer.pk, {"status": base.ERROR, "faults": [fault_messages[0]], "temps": {}, "job": None})
+    assert view_state(printer, read_state(printer.pk))["faults"] == [fault_messages[0]]
 
 
 @pytest.mark.django_db
@@ -1001,9 +1038,24 @@ def test_klipper_responses_explain_error():
         "print_stats": {"state": "error", "filename": "x.gcode", "message": "Must home axis first: 0 0 3"},
     }
     s = decorate(normalize(st, profile=Q1), console)
-    assert "START_PRINT, T0" in s["message"] and s["console"][-1].startswith("!!")
-    assert any("Unknown command" in fault for fault in s["faults"])
+    assert "START_PRINT" not in s["message"] and s["console"][-1].startswith("!!")
+    assert any("Unknown command" in line for line in s["console"])
+    assert not any("Unknown command" in fault for fault in s["faults"])
     assert any(fault.startswith("!!") for fault in s["faults"])
+
+
+def test_klipper_timeouts_are_faults_but_unknown_macro_notices_stay_in_console():
+    from printers.drivers.moonraker import decorate, keep_response
+
+    lines = [
+        "! Communication timeout during homing probe",
+        "!! SDCARD_RESET_FILE cannot be run from the sdcard",
+        '// Unknown command:"HARMONIC_NO_ALIGN"',
+    ]
+    assert all(keep_response(line) for line in lines)
+    state = decorate(normalize({"webhooks": {"state": "ready"}}, profile=Q1), lines)
+    assert state["faults"] == lines[:2]
+    assert state["console"] == lines
 
 
 def test_all_recent_klipper_fault_messages_are_retained():
@@ -1063,10 +1115,11 @@ def test_monitor_collects_gcode_responses():
 
     states = asyncio.run(scenario())
     last = states[-1]
-    assert last["status"] == base.ERROR and "START_PRINT" in last["message"]
+    assert last["status"] == base.ERROR and "START_PRINT" not in last["message"]
     assert "!! old fault" not in last["console"]  # очищено на новом задании
     assert "!! old fault" not in last["faults"]
-    assert any("Unknown command" in fault for fault in last["faults"])
+    assert any("Unknown command" in line for line in last["console"])
+    assert not any("Unknown command" in fault for fault in last["faults"])
 
 
 # --- свет ---------------------------------------------------------------------------------------

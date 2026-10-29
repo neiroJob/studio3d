@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -17,7 +18,7 @@ from .drivers import DriverError, base, client_for
 from .drivers.moonraker import fetch_snapshot, page_reachable
 from .forms import PrinterForm, UploadForm
 from .gcode_check import check_gcode, read_head_tail
-from .models import Printer, PrintJob
+from .models import Printer, PrinterFault, PrintJob
 from .profiles import get_profile, manufacturers
 from .state import read_state, read_states, view_state, write_state
 
@@ -61,12 +62,20 @@ def dashboard_context(request):
         for it in _items(list(Printer.objects.all()))
         if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED)
         or it["state"]["heating_idle"]
+        or it["state"].get("faults")
         # Печать идёт, но принтер сам сообщил предупреждение (например, датчик нити) —
         # статус при этом не меняется (unverified-сигнал, печать не останавливаем сами).
         or (it["state"]["status"] == base.PRINTING and it["state"].get("message"))
     ]
     back = reverse("dashboard") + (f"?f={current}" if current != "all" else "")
-    return {"items": items, "strip": strip, "filter": current, "attention": attention, "back": back}
+    return {
+        "items": items,
+        "strip": strip,
+        "filter": current,
+        "attention": attention,
+        "back": back,
+        "rights": user_rights(request.user),
+    }
 
 
 @right_required("view_dashboard")
@@ -79,6 +88,21 @@ def _redirect_back(request, printer):
     if nxt and url_has_allowed_host_and_scheme(nxt, {request.get_host()}):
         return redirect(nxt)
     return redirect("printer_detail", pk=printer.pk)
+
+
+@right_required("print_control")
+@require_POST
+def acknowledge_faults(request, pk):
+    printer = get_object_or_404(Printer, pk=pk)
+    count = PrinterFault.objects.filter(printer=printer, acknowledged_at__isnull=True).update(
+        acknowledged_at=timezone.now(), acknowledged_by=request.user
+    )
+    if count:
+        audit.log(request, "printer_fault_acknowledged", target=printer.name, count=count)
+        messages.success(request, f"{printer.name}: неисправности отмечены как увиденные, действия приняты.")
+    else:
+        messages.info(request, f"{printer.name}: новых неподтверждённых неисправностей нет.")
+    return _redirect_back(request, printer)
 
 
 @right_required("view_dashboard")
