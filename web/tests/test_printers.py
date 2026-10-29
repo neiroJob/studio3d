@@ -649,6 +649,8 @@ def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
     assert ignored_notice not in html
     assert "Пластик: есть" in html
     assert "нет данных от датчика" in html
+    error_filter = client.get(reverse("printer_tiles") + "?f=error").content.decode()
+    assert moonraker_faults[0] in error_filter
 
 
 @pytest.mark.django_db

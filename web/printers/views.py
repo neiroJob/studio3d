@@ -51,9 +51,16 @@ def dashboard_context(request):
     counts["all"] = len(items)
     for it in items:
         counts[it["state"]["status"]] = counts.get(it["state"]["status"], 0) + 1
+        if it["state"]["status"] != base.ERROR and it["state"].get("faults"):
+            counts[base.ERROR] = counts.get(base.ERROR, 0) + 1
     current = request.GET.get("f", "all")
     if current != "all":
-        items = [it for it in items if it["state"]["status"] == current]
+        items = [
+            it
+            for it in items
+            if it["state"]["status"] == current
+            or (current == base.ERROR and it["state"].get("faults"))
+        ]
     strip = [
         {"key": k, "label": label, "color": color, "count": counts.get(k, 0)} for k, label, color in FILTERS
     ]
