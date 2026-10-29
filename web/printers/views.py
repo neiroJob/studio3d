@@ -269,28 +269,6 @@ def command(request, pk, action):
 
 @right_required("print_control")
 @require_POST
-def gcode_command(request, pk):
-    printer = get_object_or_404(Printer, pk=pk)
-    script = request.POST.get("script", "").strip()
-    if not script:
-        messages.error(request, "Введите G-code команду.")
-        return _redirect_back(request, printer)
-    if len(script) > 4000:
-        messages.error(request, "Команда слишком длинная (максимум 4000 символов).")
-        return _redirect_back(request, printer)
-    try:
-        client_for(printer).gcode(script)
-    except DriverError as e:
-        messages.error(request, f"{printer.name}: {e}")
-        audit.log(request, audit.Action.GCODE_SEND, target=printer.name, error=str(e))
-    else:
-        audit.log(request, audit.Action.GCODE_SEND, target=printer.name, script=script[:500])
-        messages.success(request, f"{printer.name}: G-code отправлен.")
-    return _redirect_back(request, printer)
-
-
-@right_required("print_control")
-@require_POST
 def light(request, pk, mode):
     printer = get_object_or_404(Printer, pk=pk)
     if mode not in ("on", "off") or not printer.can("light"):

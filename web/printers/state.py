@@ -21,6 +21,7 @@ STATUS_COLORS = {
     base.ERROR: "--st-err",
     base.FINISHED: "--st-done",
     base.MAINTENANCE: "--st-maint",
+    base.SELF_TEST: "--st-idle",
 }
 
 

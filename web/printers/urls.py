@@ -8,7 +8,6 @@ urlpatterns = [
     path("printers/check/", views.check, name="printer_check"),
     path("printers/<int:pk>/", views.detail, name="printer_detail"),
     path("printers/<int:pk>/faults/acknowledge/", views.acknowledge_faults, name="printer_faults_acknowledge"),
-    path("printers/<int:pk>/gcode/", views.gcode_command, name="printer_gcode"),
     path("printers/<int:pk>/live/", views.live, name="printer_live"),
     path("printers/<int:pk>/snapshot.jpg", views.snapshot, name="printer_snapshot"),
     path("printers/<int:pk>/camera-frame/", views.camera_frame, name="printer_camera_frame"),

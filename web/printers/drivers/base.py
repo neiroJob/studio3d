@@ -93,10 +93,6 @@ class BaseClient:
         """Выключить все нагреватели."""
         raise NotImplementedError
 
-    def gcode(self, script):
-        """Отправить произвольный G-code на принтер."""
-        raise DriverError("Отправка G-code не поддерживается этим драйвером")
-
     def set_light(self, on):
         """Включить или выключить свет (если в профиле есть возможность light)."""
         raise NotImplementedError

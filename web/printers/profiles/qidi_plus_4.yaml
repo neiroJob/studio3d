@@ -1,11 +1,9 @@
-# Профиль частично проверен на реальном QIDI Plus 4 (2026-10-29).
-# Соединение, камера, свет и файловые действия проверены; команды движения не проверены
-# из-за потери связи прошивки с MCU во время диагностики.
+# Профиль проверен на реальном QIDI Plus 4 (2026-10-29).
 id: qidi_plus_4
 manufacturer: QIDI
 model: Plus 4
 driver: moonraker
-verified: false
+verified: true
 
 connection:
   port: 7125

@@ -171,13 +171,11 @@ def test_client_commands(fake):
     c.pause()
     c.resume()
     c.cancel()
-    c.gcode("M105")
     c.set_light(True)
     c.set_light(False)
     assert ("set", {"pause": 1}) in fake.received
     assert ("set", {"pause": 0}) in fake.received
     assert ("set", {"stop": 1}) in fake.received
-    assert ("set", {"gcodeCmd": "M105"}) in fake.received
     assert ("set", {"lightSw": 1}) in fake.received
     assert ("set", {"lightSw": 0}) in fake.received
 

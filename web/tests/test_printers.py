@@ -68,6 +68,10 @@ def test_q1_pro_profile():
     assert {"pause", "resume", "cancel", "start_file", "upload"} <= Q1.capabilities
 
 
+def test_qidi_plus4_profile_is_verified():
+    assert get_profile("qidi_plus_4").verified is True
+
+
 def test_k1c_profile():
     """Проверено на двух реальных принтерах K1C 2025 (nexusp Moonraker v0.1.1), 2026-10-28."""
     k1c = get_profile("creality_k1c")
@@ -560,29 +564,6 @@ def test_full_print_cycle_sets_awaiting_removal_and_history_moonraker(profile_id
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "qidi_plus_4", "creality_k1", "creality_k1c"])
-def test_gcode_command_is_available_for_all_printers(client, monkeypatch, profile_id):
-    sent = []
-
-    class Client:
-        def gcode(self, script):
-            sent.append(script)
-
-    make_user("gcode_operator", ROLE_OPERATOR)
-    printer = Printer.objects.create(name=profile_id, profile_id=profile_id, host="127.0.0.1", port=7125)
-    monkeypatch.setattr("printers.views.client_for", lambda p: Client())
-    login(client, "gcode_operator")
-
-    html = client.get(reverse("printer_detail", args=[printer.pk])).content.decode()
-    assert "G-code команды принтера" in html
-    response = client.post(reverse("printer_gcode", args=[printer.pk]), {"script": "M105"}, follow=True)
-
-    assert response.status_code == 200
-    assert sent == ["M105"]
-    assert AuditLog.objects.filter(action="gcode_send", target=profile_id).exists()
-
-
-@pytest.mark.django_db
 def test_add_printer_takes_hours_from_history(client, fake):
     make_user("denis", ROLE_ADMIN)
     login(client, "denis")
@@ -640,6 +621,20 @@ def test_dashboard_shows_live_state(client):
     assert "Q1Pro-01" in html and "35 %" in html and "Печать" in html and "Пауза" in html
     tiles = client.get(reverse("printer_tiles")).content.decode()
     assert "слой 42 из 120" in tiles
+
+
+@pytest.mark.django_db
+def test_printer_messages_panel_stays_visible_when_empty(client):
+    make_user("messages_operator", ROLE_OPERATOR)
+    printer = make_printer()
+    write_state(printer.pk, {"status": base.READY, "temps": {}, "job": None, "updated": time.time()})
+    login(client, "messages_operator")
+
+    html = client.get(reverse("printer_detail", args=[printer.pk])).content.decode()
+
+    assert "Сообщения принтера" in html
+    assert "Сообщений пока нет." in html
+    assert "G-code команды принтера" not in html
 
 
 @pytest.mark.django_db

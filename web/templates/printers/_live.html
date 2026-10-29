@@ -49,12 +49,11 @@
   {% endif %}
 </div>
 {% endif %}
-{% if s.console %}
 <div class="panel"><h2>Сообщения принтера</h2>
-  <div class="console">{% for line in s.console %}<div class="{% if line|slice:':2' == '!!' or 'Unknown command' in line %}bad{% endif %}">{{ line }}</div>{% endfor %}</div>
+  {% if s.console %}<div class="console">{% for line in s.console %}<div class="{% if line|slice:':2' == '!!' or 'Unknown command' in line %}bad{% endif %}">{{ line }}</div>{% endfor %}</div>
   <p class="hint" style="margin:8px 0 0">Последние сообщения прошивки, включая ошибки и предупреждения.</p>
+  {% else %}<p class="muted" style="margin:0">Сообщений пока нет.</p>{% endif %}
 </div>
-{% endif %}
 <div class="panel"><h2>Температуры, °C</h2>
   {% if s.temps.nozzle %}
   <dl class="kv"><dt>Сопло</dt><dd>{{ s.temps.nozzle.0|floatformat:1 }} / {{ s.temps.nozzle.1|floatformat:0 }}</dd>

@@ -256,9 +256,6 @@ class CrealityNativeClient(base.BaseClient):
         self._run(self._session().run(send={"method": "set", "params": {"gcodeCmd": "M104 S0"}}))
         self._set(gcodeCmd="M140 S0")
 
-    def gcode(self, script):
-        self._set(gcodeCmd=script)
-
     def set_light(self, on):
         self._set(lightSw=1 if on else 0)
 
