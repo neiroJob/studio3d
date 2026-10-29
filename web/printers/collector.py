@@ -43,6 +43,10 @@ def save_job(printer_id, job, live):
     if not job["end_time"] or job["end_time"] <= printer.history_since:
         return False  # уже учтено в базе наработки на момент добавления принтера
     status = job["status"] if job["status"] in PrintJob.Status.values else PrintJob.Status.OTHER
+    existing = PrintJob.objects.filter(printer=printer, external_id=job["external_id"]).first()
+    if existing and existing.status == PrintJob.Status.COMPLETED and status != PrintJob.Status.COMPLETED:
+        # Запоздавшая резервная оценка не должна понизить подтверждённое завершение.
+        return False
     _, created = PrintJob.objects.update_or_create(
         printer=printer,
         external_id=job["external_id"],
@@ -57,7 +61,7 @@ def save_job(printer_id, job, live):
             "filament_g": job["filament_g"],
         },
     )
-    if live and created and status == PrintJob.Status.COMPLETED:
+    if live and status == PrintJob.Status.COMPLETED:
         Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
     return created
 
@@ -120,6 +124,33 @@ class PrinterWorker:
         self.connected = True
         if state["status"] == base.PRINTING:
             await clear_awaiting(self.printer.pk)
+        previous_job = self.last_state.get("job") or {}
+        if (
+            self.printer.profile_id == "creality_k1"
+            and self.last_state.get("status") in (base.PRINTING, base.PAUSED)
+            and state.get("status") == base.READY
+            and previous_job.get("filename")
+        ):
+            # K1 иногда пропускает кадр завершения. Монитор обычно сохраняет
+            # задание первым; повторный upsert страхует переход состояния.
+            elapsed = float(previous_job.get("elapsed") or 0)
+            progress = float(previous_job.get("progress") or 0)
+            started = (self.last_state.get("updated") or time.time()) - elapsed
+            await self.on_job(
+                {
+                    "external_id": previous_job.get("external_id")
+                    or f"{previous_job['filename']}@{round(started)}",
+                    "filename": previous_job["filename"],
+                    "status": "completed" if progress >= 0.999 else "cancelled",
+                    "start_time": started,
+                    "end_time": time.time(),
+                    "print_duration": elapsed,
+                    "total_duration": elapsed,
+                    "filament_mm": previous_job.get("filament_mm") or 0.0,
+                    "filament_g": previous_job.get("filament_g_total"),
+                },
+                live=True,
+            )
         if self.pending_job_check is not None:
             pending = self.pending_job_check
             self.pending_job_check = None

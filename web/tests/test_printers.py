@@ -411,7 +411,11 @@ def test_collector_save_job_and_awaiting_removal():
         }
     )
     assert async_to_sync(collector.save_job)(printer.pk, job, True) is True
+    printer.awaiting_removal = False
+    printer.save(update_fields=["awaiting_removal"])
     assert async_to_sync(collector.save_job)(printer.pk, job, True) is False  # повтор не дублирует
+    printer.refresh_from_db()
+    assert printer.awaiting_removal is True  # повторное завершение тоже восстанавливает состояние
     old = dict(job, external_id="J0", end_time=1500.0)
     assert async_to_sync(collector.save_job)(printer.pk, old, False) is False  # уже в базе наработки
     printer.refresh_from_db()
@@ -468,6 +472,32 @@ def test_collector_recovers_job_lost_in_connection_gap():
         {"status": base.PRINTING, "job": {"filename": "continuing.gcode", "progress": 0.52}, "updated": time.time()}
     )
     assert PrintJob.objects.filter(printer=printer3).count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_k1_ready_transition_recovers_completed_job():
+    printer = make_printer(name="K1-ready-transition", profile_id="creality_k1")
+    worker = collector.PrinterWorker(printer, session=None)
+    started = time.time() - 900
+    worker.last_state = {
+        "status": base.PRINTING,
+        "updated": time.time(),
+        "job": {
+            "filename": "finished.gcode",
+            "external_id": f"finished.gcode@{round(started)}",
+            "progress": 1.0,
+            "elapsed": 900,
+            "filament_mm": 850,
+        },
+    }
+
+    async_to_sync(worker.on_state)({"status": base.READY, "job": None, "updated": time.time()})
+
+    job = PrintJob.objects.get(printer=printer)
+    printer.refresh_from_db()
+    assert job.status == "completed"
+    assert job.external_id == f"finished.gcode@{round(started)}"
+    assert printer.awaiting_removal is True
 
 
 @pytest.mark.django_db(transaction=True)

@@ -401,6 +401,10 @@ class CrealityNativeMonitor(base.BaseMonitor):
                 await self._refresh_gcode_meta(ws)
                 self._snapshot_job()
                 state = normalize({**self.data, "_gcode_meta": self._gcode_meta}, self.profile)
+                if state.get("job") and state["job"].get("filename"):
+                    state["job"]["external_id"] = (
+                        f"{state['job']['filename']}@{round(self.data.get('printStartTime') or 0)}"
+                    )
                 await self._track_job(state, on_job)
                 await on_state(state)
         raise ConnectionError("Соединение закрыто принтером")
