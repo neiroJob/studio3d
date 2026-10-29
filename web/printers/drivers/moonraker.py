@@ -158,7 +158,15 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
             warning = "Датчик нити: пластик не подаётся (обрыв, конец прутка или застрял)."
             message = f"{message} {warning}".strip() if message else warning
 
-    return {"status": result, "message": message, "temps": temps, "job": job, "light": light, "updated": now}
+    return {
+        "status": result,
+        "message": message,
+        "faults": [message] if message else [],
+        "temps": temps,
+        "job": job,
+        "light": light,
+        "updated": now,
+    }
 
 
 def job_from_history(item):
@@ -474,10 +482,24 @@ def keep_response(line):
     return bool(line) and not line.startswith(SKIP_RESPONSES)
 
 
-def decorate(state, console):
+def _is_fault_response(line):
+    return bool(
+        re.match(r"^!!\s|^//\s*Unknown command", line, re.IGNORECASE)
+        or re.search(r"\b(?:error|failed|failure|fault|shutdown|lost communication)\b", line, re.IGNORECASE)
+    )
+
+
+def decorate(state, console, fault_messages=None):
     """Добавить к состоянию последние сообщения принтера и вывод о незнакомых командах."""
     lines = [c for c in console]
-    state["console"] = lines[-8:]
+    state["console"] = lines[-20:]
+    faults = list(state.get("faults") or [])
+    candidates = lines if fault_messages is None else fault_messages
+    for line in candidates:
+        if line and (fault_messages is not None or _is_fault_response(line)):
+            if line not in faults:
+                faults.append(line)
+    state["faults"] = faults
     if state.get("status") == base.ERROR:
         unknown = list(dict.fromkeys(m.group(1) for c in lines for m in [UNKNOWN_CMD_RE.search(c)] if m))
         if unknown:
@@ -503,6 +525,7 @@ class MoonrakerMonitor(base.BaseMonitor):
         self._ids = itertools.count(1)
         self._pending = {}
         self.console = collections.deque(maxlen=20)
+        self.faults = []
         self._catchup_tasks = set()
 
     @property
@@ -582,14 +605,22 @@ class MoonrakerMonitor(base.BaseMonitor):
         server = await self._call(ws, "server.info")
         if server.get("klippy_state") != "ready":
             self.status = {"webhooks": {"state": server.get("klippy_state", "startup"), "state_message": ""}}
-            await on_state(decorate(normalize(self.status, profile=self.profile), self.console))
+            await self._emit_state(on_state)
             return  # дождёмся notify_klippy_ready
         result = await self._call(
             ws, "printer.objects.subscribe", {"objects": subscribe_objects(self.profile)}
         )
         self.status = result.get("status", {})
         await self._refresh_meta()
-        await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+        await self._emit_state(on_state)
+
+    async def _emit_state(self, on_state):
+        state = decorate(normalize(self.status, self.meta, self.profile), self.console, self.faults)
+        for fault in state.get("faults") or []:
+            if fault not in self.faults:
+                self.faults.append(fault)
+        state["faults"] = list(self.faults)
+        await on_state(state)
 
     async def _reader(self, ws, on_state, on_job):
         import aiohttp
@@ -614,22 +645,25 @@ class MoonrakerMonitor(base.BaseMonitor):
                 for name, diff in params[0].items():
                     self.status.setdefault(name, {}).update(diff)
                 await self._refresh_meta()
-                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+                await self._emit_state(on_state)
                 if was_active and not self._job_active():
                     self._spawn_catchup(on_job)
             elif method == "notify_gcode_response" and params:
                 for line in str(params[0]).splitlines():
                     if line.startswith("File opened:"):
                         self.console.clear()  # новое задание — прошлые сообщения не нужны
+                        self.faults.clear()
                     if keep_response(line):
                         self.console.append(line.strip())
-                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+                        if _is_fault_response(line.strip()) and line.strip() not in self.faults:
+                            self.faults.append(line.strip())
+                await self._emit_state(on_state)
             elif method == "notify_klippy_ready":
                 asyncio.create_task(self._subscribe(ws, on_state))
             elif method in ("notify_klippy_shutdown", "notify_klippy_disconnected"):
                 state = "shutdown" if method.endswith("shutdown") else "startup"
                 self.status.setdefault("webhooks", {})["state"] = state
-                await on_state(decorate(normalize(self.status, self.meta, self.profile), self.console))
+                await self._emit_state(on_state)
             elif method == "notify_history_changed" and params:
                 event = params[0]
                 if event.get("action") == "finished" and event.get("job"):

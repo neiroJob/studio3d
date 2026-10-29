@@ -133,6 +133,7 @@ def normalize(data, profile=None, connected=True, now=None):
     return {
         "status": status,
         "message": message,
+        "faults": [message] if status == base.ERROR and message else [],
         "temps": temps,
         "job": job,
         "light": light,

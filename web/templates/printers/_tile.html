@@ -10,7 +10,7 @@
     {% if s.status == "offline" %}
       <div class="meta">{{ s.message|default:"Принтер не отвечает" }} · {{ p.host }}{% if p.last_seen_at %}<br>Последний ответ {{ p.last_seen_at|date:"d.m H:i" }}{% endif %}</div>
     {% elif s.status == "error" %}
-      <div class="meta" style="color:var(--st-err)">{{ s.message|truncatechars:160 }}</div>
+      <div class="meta" style="color:var(--st-err)">{{ s.message }}</div>
       {% if s.job %}<div class="meta">{{ s.job.filename|basename }}</div>{% endif %}
     {% elif s.job %}
       <div class="big">{{ s.job.percent }} %<small>{% if s.job.remaining is not None %}осталось {{ s.job.remaining|duration }} · до {{ s.job.remaining|eta }}{% endif %}</small></div>
@@ -19,6 +19,7 @@
     {% elif s.status == "finished" %}
       <div class="meta">Печать завершена — снимите изделие со стола.</div>
     {% endif %}
+    {% if s.faults %}<div class="meta" style="color:var(--st-err)">{% for fault in s.faults %}{% if fault != s.message %}<div>{{ fault }}</div>{% endif %}{% endfor %}</div>{% endif %}
     {% if s.temps.nozzle %}<div class="temps"><span>Сопло {{ s.temps.nozzle.0|floatformat:0 }}°</span><span>Стол {{ s.temps.bed.0|floatformat:0 }}°</span>{% if s.temps.chamber %}<span>Камера {{ s.temps.chamber.0|floatformat:0 }}°</span>{% endif %}</div>{% endif %}
     <div class="acts">
       {% if "print_control" in rights %}

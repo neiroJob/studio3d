@@ -79,6 +79,7 @@ def test_derive_status_printing_and_paused():
 def test_derive_status_error_and_self_test():
     err = dict(IDLE, err={"errcode": 5, "key": 1, "value": "термистор сопла"})
     assert derive_status(err) == (base.ERROR, "термистор сопла")
+    assert normalize(err)["faults"] == ["термистор сопла"]
     testing = dict(IDLE, withSelfTest=50)
     status, _ = derive_status(testing)
     assert status == base.PRINTING

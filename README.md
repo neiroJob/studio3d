@@ -32,7 +32,9 @@ own server inside the studio network — no cloud account, no subscription, noth
 >   machine hours, Klipper messages.
 >
 > Verified on real hardware: **QIDI Q1 Pro** and **Creality K1C** (Moonraker), **Creality K1** (native
-> WebSocket). More models are added after they are tested on real printers. See [CHANGELOG.md](CHANGELOG.md) and [ROADMAP.md](ROADMAP.md).
+> WebSocket). **QIDI Plus 4** is partially verified: connection, camera, light and file actions work; motion controls
+> await a printer firmware fault being resolved. More models are added after they are tested on real printers. See
+> [CHANGELOG.md](CHANGELOG.md) and [ROADMAP.md](ROADMAP.md).
 >
 > The user interface is in Russian today; English UI is on the roadmap.
 
@@ -87,7 +89,8 @@ Nothing is installed on the printers; Studio3D talks to the stock firmware.
 | Vendor | Model | Driver | Status |
 | --- | --- | --- | --- |
 | QIDI | Q1 Pro | moonraker | ✅ profile verified on a real printer |
-| QIDI | Plus 4, Q2 | moonraker | planned, after testing on hardware |
+| QIDI | Plus 4 | moonraker | ⚠️ connection, camera, light and file actions verified; motion controls pending |
+| QIDI | Q2 | moonraker | planned, after testing on hardware |
 | Elegoo | Neptune 4 Max | moonraker | planned, after testing on hardware |
 | Creality | K1C (2025 revision) | moonraker + port 9999 for the light | ✅ verified on two printers, incl. starting prints |
 | Creality | K1 | creality_native (WebSocket 9999) | ✅ verified on a real printer, incl. starting prints |

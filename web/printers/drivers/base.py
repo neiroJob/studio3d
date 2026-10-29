@@ -5,6 +5,7 @@
     {
       "status": "offline|ready|printing|paused|error",   # «завершено» и «обслуживание» добавляет веб
       "message": "текст ошибки или пусто",
+      "faults": [str, ...],  # все доступные сообщения об ошибках/предупреждениях
       "temps": {"nozzle": [тек, цель], "bed": [тек, цель], "chamber": [тек, цель] | None},
       "job": None | {
           "filename": str, "progress": 0..1, "layer": int|None, "total_layers": int|None,
@@ -38,7 +39,14 @@ class DriverError(Exception):
 
 
 def offline_state(message="", updated=0.0):
-    return {"status": OFFLINE, "message": message, "temps": {}, "job": None, "updated": updated}
+    return {
+        "status": OFFLINE,
+        "message": message,
+        "faults": [],
+        "temps": {},
+        "job": None,
+        "updated": updated,
+    }
 
 
 class BaseClient:

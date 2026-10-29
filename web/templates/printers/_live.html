@@ -49,7 +49,7 @@
 {% if s.console %}
 <div class="panel"><h2>Сообщения принтера</h2>
   <div class="console">{% for line in s.console %}<div class="{% if line|slice:':2' == '!!' or 'Unknown command' in line %}bad{% endif %}">{{ line }}</div>{% endfor %}</div>
-  <p class="hint" style="margin:8px 0 0">Последние ответы Klipper по текущему заданию.</p>
+  <p class="hint" style="margin:8px 0 0">Последние сообщения прошивки, включая ошибки и предупреждения.</p>
 </div>
 {% endif %}
 <div class="panel"><h2>Температуры, °C</h2>

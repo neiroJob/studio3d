@@ -604,6 +604,41 @@ def test_dashboard_attention_shows_printing_with_warning_message(client):
 
 
 @pytest.mark.django_db
+def test_dashboard_shows_all_fault_messages_for_moonraker_and_creality(client):
+    make_user("sergey", ROLE_OPERATOR)
+    moonraker = make_printer()
+    creality = Printer.objects.create(name="K1-01", profile_id="creality_k1", host="127.0.0.1", port=9999)
+    moonraker_faults = ["Датчик нити: пластик не подаётся.", "Moonraker second warning is retained"]
+    creality_fault = "Creality fault: " + "detailed message " * 20
+    write_state(
+        moonraker.pk,
+        {
+            "status": base.PRINTING,
+            "message": moonraker_faults[0],
+            "faults": moonraker_faults,
+            "temps": {},
+            "job": {"filename": "a.gcode", "progress": 0.5},
+            "updated": time.time(),
+        },
+    )
+    write_state(
+        creality.pk,
+        {
+            "status": base.ERROR,
+            "message": creality_fault,
+            "faults": [creality_fault],
+            "temps": {},
+            "job": None,
+            "updated": time.time(),
+        },
+    )
+    login(client, "sergey")
+    html = client.get(reverse("printer_tiles")).content.decode()
+    assert all(fault in html for fault in moonraker_faults)
+    assert creality_fault in html
+
+
+@pytest.mark.django_db
 def test_rights_for_commands(client, fake):
     make_user("anna", ROLE_MANAGER)
     make_user("sergey", ROLE_OPERATOR)
@@ -967,6 +1002,19 @@ def test_klipper_responses_explain_error():
     }
     s = decorate(normalize(st, profile=Q1), console)
     assert "START_PRINT, T0" in s["message"] and s["console"][-1].startswith("!!")
+    assert any("Unknown command" in fault for fault in s["faults"])
+    assert any(fault.startswith("!!") for fault in s["faults"])
+
+
+def test_all_recent_klipper_fault_messages_are_retained():
+    from printers.drivers.moonraker import decorate
+
+    lines = [f"!! printer fault {n}" for n in range(25)]
+    state = decorate(normalize({"webhooks": {"state": "ready"}}, profile=Q1), lines)
+    assert len(state["console"]) == 20
+    assert state["console"][0] == "!! printer fault 5"
+    assert len(state["faults"]) == 25
+    assert state["faults"][0] == "!! printer fault 0"
 
 
 def test_monitor_collects_gcode_responses():
@@ -990,7 +1038,7 @@ def test_monitor_collects_gcode_responses():
                 if states:
                     break
                 await asyncio.sleep(0.05)
-            await fake.notify("notify_gcode_response", ["// old message"])
+            await fake.notify("notify_gcode_response", ["!! old fault"])
             await fake.notify("notify_gcode_response", ["File opened:a.gcode Size:10"])
             await fake.notify("notify_gcode_response", ['// Unknown command:"START_PRINT"'])
             await fake.notify(
@@ -1016,7 +1064,9 @@ def test_monitor_collects_gcode_responses():
     states = asyncio.run(scenario())
     last = states[-1]
     assert last["status"] == base.ERROR and "START_PRINT" in last["message"]
-    assert "// old message" not in last["console"]  # очищено на новом задании
+    assert "!! old fault" not in last["console"]  # очищено на новом задании
+    assert "!! old fault" not in last["faults"]
+    assert any("Unknown command" in fault for fault in last["faults"])
 
 
 # --- свет ---------------------------------------------------------------------------------------

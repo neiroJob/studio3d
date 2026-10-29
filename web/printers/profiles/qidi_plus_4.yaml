@@ -1,0 +1,37 @@
+# Профиль частично проверен на реальном QIDI Plus 4 (2026-10-29).
+# Соединение, камера, свет и файловые действия проверены; команды движения не проверены
+# из-за потери связи прошивки с MCU во время диагностики.
+id: qidi_plus_4
+manufacturer: QIDI
+model: Plus 4
+driver: moonraker
+verified: false
+
+connection:
+  port: 7125
+  web_ui: "http://{host}:10088"
+
+# Официальная паспортная мощность: стол 450 Вт + нагрев камеры 400 Вт.
+power_w: 850
+
+build_volume_mm: [305, 305, 280]
+
+objects:
+  chamber: "heater_generic chamber"
+  filament_sensor: "filament_switch_sensor fila"
+
+camera:
+  type: mjpeg_snapshot
+  snapshot_url: "http://{host}:10088/webcam/?action=snapshot"
+
+capabilities: [pause, resume, cancel, start_file, upload, light, delete_file, rename_file]
+
+light:
+  object: "output_pin caselight"
+  on_gcode: "SET_PIN PIN=caselight VALUE=1"
+  off_gcode: "SET_PIN PIN=caselight VALUE=0"
+
+tools: 1
+
+gcode:
+  start_macro: PRINT_START
