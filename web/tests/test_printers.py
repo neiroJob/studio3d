@@ -599,10 +599,11 @@ def test_real_q1pro_history_job():
     job = job_from_history(item)
     assert job["status"] == "completed" and job["external_id"] == "00007C"
     assert job["filament_g"] == 83.45 and round(job["print_duration"]) == 32027
-    from printers.templatetags.printers_tags import gcode_name
+    from printers.templatetags.printers_tags import basename
 
-    assert gcode_name(job["filename"]) == "part-A - 3_9h24m.gcode"
-    assert gcode_name("folder/a.gcode") == "folder/a.gcode"
+    assert basename(job["filename"]) == "part-A - 3_9h24m.gcode"
+    assert basename("folder/a.gcode") == "a.gcode"
+    assert basename("/usr/data/printer_data/gcodes/project_2_PETG.gcode") == "project_2_PETG.gcode"
 
 
 def test_eta_filter():

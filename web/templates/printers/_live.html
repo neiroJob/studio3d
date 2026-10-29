@@ -3,11 +3,11 @@
   <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
   {% if s.message %}<div class="msg error" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
   {% if s.job and s.status == "error" %}
-    <dl class="kv"><dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd></dl>
+    <dl class="kv"><dt>Файл</dt><dd>{{ s.job.filename|basename }}</dd></dl>
   {% elif s.job %}
     <div class="bar" style="margin-bottom:12px"><i style="width:{{ s.job.percent }}%"></i></div>
     <dl class="kv">
-      <dt>Файл</dt><dd>{{ s.job.filename|gcode_name }}</dd>
+      <dt>Файл</dt><dd>{{ s.job.filename|basename }}</dd>
       <dt>Прогресс</dt><dd>{{ s.job.percent }} %{% if s.job.layer %}, слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% elif s.job.total_layers %}, слоёв {{ s.job.total_layers }}{% endif %}</dd>
       <dt>Прошло</dt><dd>{{ s.job.elapsed|duration }}</dd>
       <dt>Осталось</dt><dd>{{ s.job.remaining|duration }}{% if s.job.remaining is not None %} — закончится в {{ s.job.remaining|eta }}{% endif %}</dd>

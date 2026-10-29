@@ -15,7 +15,7 @@
 {% if tab == "now" %}
 <div class="g32">
   <div class="stack">
-    <div class="cam">{% if profile.camera_type == "mjpeg_snapshot" and profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% elif profile.camera_type == "webrtc_iframe" and camera_page_url %}<iframe src="{% url 'printer_camera_frame' printer.pk %}" title="Камера" allow="autoplay" scrolling="no"></iframe><span class="live">Камера · страница принтера</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
+    <div class="cam">{% if profile.camera_type == "mjpeg_snapshot" and profile.snapshot_url %}<img id="cam-{{ printer.pk }}" data-refresh src="{% url 'printer_snapshot' printer.pk %}" alt="Камера"><span class="live">Камера · обновление {{ camera_refresh }} с</span>{% elif profile.camera_type == "webrtc_iframe" and camera_page_url %}<iframe data-cam-fit src="{% url 'printer_camera_frame' printer.pk %}" title="Камера" allow="autoplay" scrolling="no"></iframe><span class="live">Камера · страница принтера</span>{% else %}<span class="live">Камеры нет</span>{% endif %}</div>
   </div>
   <div class="stack" hx-get="{% url 'printer_live' printer.pk %}" hx-trigger="every 3s" hx-swap="innerHTML">
     {% include "printers/_live.html" %}
@@ -65,7 +65,7 @@
 {% elif tab == "history" %}
 <div class="panel tbl-wrap"><table>
   <tr><th>Начало</th><th>Конец</th><th>Файл</th><th class="num">Время печати</th><th class="num">Пластик</th><th>Результат</th></tr>
-  {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|gcode_name }}</td><td class="num">{{ j.print_duration|duration }}</td>
+  {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|basename }}</td><td class="num">{{ j.print_duration|duration }}</td>
     <td class="num">{% if j.filament_g %}{{ j.filament_g|floatformat:0 }} г{% else %}{{ j.filament_mm|floatformat:0 }} мм{% endif %}</td>
     <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span></td></tr>
   {% empty %}<tr><td colspan="6" class="muted">Заданий с момента подключения пока нет.</td></tr>{% endfor %}

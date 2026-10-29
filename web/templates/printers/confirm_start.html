@@ -3,7 +3,7 @@
 {% block heading %}{{ printer.name }}: проверка файла{% endblock %}
 {% block content %}
 <div class="panel" style="max-width:760px">
-  <h2>Файл «{{ filename|gcode_name }}» может не подойти этому принтеру</h2>
+  <h2>Файл «{{ filename|basename }}» может не подойти этому принтеру</h2>
   {% for w in warnings %}<div class="alert"><span class="dot" style="background:var(--st-err)"></span><div>{{ w }}</div></div>{% endfor %}
   <p class="small muted" style="margin-top:12px">Надёжнее перенарезать модель в слайсере с профилем {{ printer.profile.title }}. Если вы уверены, что файл подходит, его можно запустить.</p>
   <div class="form-actions">

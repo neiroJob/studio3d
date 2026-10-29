@@ -11,11 +11,11 @@
       <div class="meta">{{ s.message|default:"Принтер не отвечает" }} · {{ p.host }}{% if p.last_seen_at %}<br>Последний ответ {{ p.last_seen_at|date:"d.m H:i" }}{% endif %}</div>
     {% elif s.status == "error" %}
       <div class="meta" style="color:var(--st-err)">{{ s.message|truncatechars:160 }}</div>
-      {% if s.job %}<div class="meta">{{ s.job.filename|gcode_name }}</div>{% endif %}
+      {% if s.job %}<div class="meta">{{ s.job.filename|basename }}</div>{% endif %}
     {% elif s.job %}
       <div class="big">{{ s.job.percent }} %<small>{% if s.job.remaining is not None %}осталось {{ s.job.remaining|duration }} · до {{ s.job.remaining|eta }}{% endif %}</small></div>
       <div class="bar" style="margin-top:6px"><i style="width:{{ s.job.percent }}%"></i></div>
-      <div class="meta">{{ s.job.filename|gcode_name }}{% if s.job.layer %}<br>слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% endif %}</div>
+      <div class="meta">{{ s.job.filename|basename }}{% if s.job.layer %}<br>слой {{ s.job.layer }}{% if s.job.total_layers %} из {{ s.job.total_layers }}{% endif %}{% endif %}</div>
     {% elif s.status == "finished" %}
       <div class="meta">Печать завершена — снимите изделие со стола.</div>
     {% endif %}

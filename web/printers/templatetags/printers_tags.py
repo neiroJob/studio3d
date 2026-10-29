@@ -61,15 +61,5 @@ def can(printer, capability):
 
 @register.filter
 def basename(path):
+    """Только имя файла, без пути: «.cache/деталь.gcode» и «/usr/data/.../деталь.gcode» → «деталь.gcode»."""
     return str(path or "").rsplit("/", 1)[-1]
-
-
-@register.filter
-def gcode_name(path):
-    """«.cache/деталь.gcode» → «деталь.gcode»: служебные скрытые папки QIDI не показываем."""
-    if not path:
-        return ""
-    parts = [p for p in str(path).split("/") if p]
-    while len(parts) > 1 and parts[0].startswith("."):
-        parts.pop(0)
-    return "/".join(parts)

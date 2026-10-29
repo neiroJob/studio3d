@@ -63,6 +63,24 @@
   });
 })();
 
+// Камера принтера во фрейме (webrtc_iframe, K1C): страница принтера рассчитана на весь экран
+// браузера, а не на маленький блок карточки — при обычном 100%-размере её вёрстка не помещается
+// и либо обрезается, либо появляются свои полосы прокрутки. Поэтому фрейм рендерится в полный
+// размер (ширина/высота заданы в CSS, .cam iframe), а здесь просто уменьшается масштабом под
+// размер блока — видно всю страницу целиком, без обрезки и без прокрутки.
+(function () {
+  function fit(iframe) {
+    const box = iframe.parentElement;
+    if (!box || !iframe.offsetWidth) return;
+    iframe.style.transform = "scale(" + box.clientWidth / iframe.offsetWidth + ")";
+  }
+  function fitAll() {
+    document.querySelectorAll("iframe[data-cam-fit]").forEach(fit);
+  }
+  document.addEventListener("DOMContentLoaded", fitAll);
+  window.addEventListener("resize", fitAll);
+})();
+
 // Форма принтера: производитель → модель; порт и мощность из профиля; наработка из проверки связи.
 (function () {
   function setup() {
