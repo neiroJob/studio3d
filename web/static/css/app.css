@@ -69,6 +69,17 @@ dialog.plate-dialog:has(input[name=quality][value=defect]:checked) .defect-field
 dialog.plate-dialog select,dialog.plate-dialog textarea{width:100%;margin-top:4px}
 dialog.plate-dialog label.check{display:block;margin:6px 0}
 .icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:34px;height:34px;cursor:pointer;display:inline-grid;place-items:center;font-size:16px;line-height:1}
+.menu-wrap{position:relative;display:inline-block}
+.menu-wrap>summary{list-style:none}
+.menu-wrap>summary::-webkit-details-marker{display:none}
+.menu-wrap[open]>summary{background:var(--panel2)}
+.menu-wrap .menu{position:fixed;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;box-shadow:0 6px 18px rgba(23,32,43,.16);min-width:170px;padding:4px;z-index:60}
+.menu-wrap .menu form{display:block}
+.menu-wrap .menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;
+  border-radius:6px;cursor:pointer;font-size:14px}
+.menu-wrap .menu button:hover{background:var(--panel2)}
+.menu-wrap .menu button.warn{color:var(--err)}
 .top .menu-btn{display:none}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .spacer{flex:1}
@@ -96,6 +107,7 @@ form.inline{display:inline}
 
 /* таблицы */
 .tbl-wrap{overflow-x:auto}
+.file-path{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th{font-weight:500;color:var(--ink3);text-align:left;font-size:13px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}

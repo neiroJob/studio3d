@@ -52,6 +52,9 @@
       const d = closeDlg.closest("dialog");
       if (d) d.close();
     }
+    document.querySelectorAll("details.menu-wrap[open]").forEach(function (d) {
+      if (!d.contains(e.target)) d.removeAttribute("open");
+    });
     const renameBtn = e.target.closest("[data-rename-btn]");
     if (renameBtn) {
       const current = renameBtn.getAttribute("data-rename-btn");
@@ -64,6 +67,22 @@
     }
   });
   document.addEventListener("DOMContentLoaded", function () { apply(current()); });
+
+  // Меню «⋯» (переименовать/удалить файл) — position:fixed, а не absolute: иначе таблица
+  // файлов, у которой включён overflow-x:auto (широкие строки), обрезает выпадающее меню или
+  // сама обзаводится лишней полосой прокрутки, когда меню открыто (меню входит в прокручиваемую
+  // область родителя). Координаты считаем от кнопки при каждом открытии.
+  document.addEventListener("toggle", function (e) {
+    const d = e.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.classList.contains("menu-wrap") || !d.open) return;
+    const menu = d.querySelector(".menu");
+    const btn = d.querySelector("summary");
+    if (!menu || !btn) return;
+    const r = btn.getBoundingClientRect();
+    menu.style.top = r.bottom + 4 + "px";
+    menu.style.left = "auto";
+    menu.style.right = window.innerWidth - r.right + "px";
+  }, true);
 })();
 
 // Превью камер: обновление раз в N секунд, только когда вкладка видна.
