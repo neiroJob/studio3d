@@ -21,6 +21,17 @@
     {% include "printers/_live.html" %}
   </div>
 </div>
+{% if can_control %}
+<details class="panel" style="margin-top:16px" open>
+  <summary><b>G-code команды принтера</b></summary>
+  <p class="hint">Команда будет отправлена напрямую на принтер. Она может перемещать оси и включать нагрев.</p>
+  <form method="post" action="{% url 'printer_gcode' printer.pk %}" data-busy="Отправляется…">
+    {% csrf_token %}
+    <textarea name="script" rows="3" maxlength="4000" required placeholder="Например: M105"></textarea>
+    <div class="row" style="margin-top:8px"><span class="spacer"></span><button class="btn pri" type="submit">Отправить G-code</button></div>
+  </form>
+</details>
+{% endif %}
 {% if "print_plate" in rights %}
 <dialog id="plate-dialog-{{ printer.pk }}" class="plate-dialog">
   <form method="post" action="{% url 'printer_cleared' printer.pk %}" data-busy="Изделие снимается…">

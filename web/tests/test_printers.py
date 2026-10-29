@@ -560,6 +560,29 @@ def test_full_print_cycle_sets_awaiting_removal_and_history_moonraker(profile_id
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "qidi_plus_4", "creality_k1", "creality_k1c"])
+def test_gcode_command_is_available_for_all_printers(client, monkeypatch, profile_id):
+    sent = []
+
+    class Client:
+        def gcode(self, script):
+            sent.append(script)
+
+    make_user("gcode_operator", ROLE_OPERATOR)
+    printer = Printer.objects.create(name=profile_id, profile_id=profile_id, host="127.0.0.1", port=7125)
+    monkeypatch.setattr("printers.views.client_for", lambda p: Client())
+    login(client, "gcode_operator")
+
+    html = client.get(reverse("printer_detail", args=[printer.pk])).content.decode()
+    assert "G-code команды принтера" in html
+    response = client.post(reverse("printer_gcode", args=[printer.pk]), {"script": "M105"}, follow=True)
+
+    assert response.status_code == 200
+    assert sent == ["M105"]
+    assert AuditLog.objects.filter(action="gcode_send", target=profile_id).exists()
+
+
+@pytest.mark.django_db
 def test_add_printer_takes_hours_from_history(client, fake):
     make_user("denis", ROLE_ADMIN)
     login(client, "denis")
@@ -638,6 +661,22 @@ def test_dashboard_attention_shows_printing_with_warning_message(client):
     login(client, "sergey")
     html = client.get(reverse("printer_tiles")).content.decode()
     assert "Датчик нити" in html
+
+
+@pytest.mark.django_db
+def test_k1_self_test_is_visible_without_operator_attention(client):
+    make_user("k1_self_test_operator", ROLE_OPERATOR)
+    printer = Printer.objects.create(name="K1-self-test", profile_id="creality_k1", host="127.0.0.1", port=9999)
+    write_state(
+        printer.pk,
+        {"status": base.SELF_TEST, "message": "Самопроверка принтера", "temps": {}, "job": None, "updated": time.time()},
+    )
+    login(client, "k1_self_test_operator")
+
+    response = client.get("/")
+
+    assert "Самопроверка принтера" in response.content.decode()
+    assert response.context["attention"] == []
 
 
 @pytest.mark.django_db

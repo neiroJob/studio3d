@@ -25,6 +25,7 @@ PAUSED = "paused"
 ERROR = "error"
 FINISHED = "finished"  # завершено, ждёт снятия — признак хранится в БД
 MAINTENANCE = "maintenance"  # обслуживание — появится на этапе ТО
+SELF_TEST = "self_test"
 
 STATUS_LABELS = {
     OFFLINE: "Нет связи",
@@ -34,6 +35,7 @@ STATUS_LABELS = {
     ERROR: "Ошибка",
     FINISHED: "Ждёт снятия",
     MAINTENANCE: "Обслуживание",
+    SELF_TEST: "Самопроверка",
 }
 
 _IGNORED_DASHBOARD_FAULT = re.compile(r"^\s*(?://\s*)?Unknown command\b", re.IGNORECASE)
@@ -90,6 +92,10 @@ class BaseClient:
     def heaters_off(self):
         """Выключить все нагреватели."""
         raise NotImplementedError
+
+    def gcode(self, script):
+        """Отправить произвольный G-code на принтер."""
+        raise DriverError("Отправка G-code не поддерживается этим драйвером")
 
     def set_light(self, on):
         """Включить или выключить свет (если в профиле есть возможность light)."""

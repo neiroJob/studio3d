@@ -82,7 +82,8 @@ def test_derive_status_error_and_self_test():
     assert normalize(err)["faults"] == ["термистор сопла"]
     testing = dict(IDLE, withSelfTest=50)
     status, _ = derive_status(testing)
-    assert status == base.PRINTING
+    assert status == base.SELF_TEST
+    assert derive_status(testing)[1] == "Самопроверка принтера"
 
 
 def test_normalize_offline():
@@ -170,11 +171,13 @@ def test_client_commands(fake):
     c.pause()
     c.resume()
     c.cancel()
+    c.gcode("M105")
     c.set_light(True)
     c.set_light(False)
     assert ("set", {"pause": 1}) in fake.received
     assert ("set", {"pause": 0}) in fake.received
     assert ("set", {"stop": 1}) in fake.received
+    assert ("set", {"gcodeCmd": "M105"}) in fake.received
     assert ("set", {"lightSw": 1}) in fake.received
     assert ("set", {"lightSw": 0}) in fake.received
 

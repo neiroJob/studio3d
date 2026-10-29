@@ -93,6 +93,7 @@ class AuditLog(models.Model):
         PLATE_CLEARED = "plate_cleared", "Изделие снято"
         PRINTER_LIGHT = "printer_light", "Свет принтера"
         HEATERS_OFF = "heaters_off", "Нагрев выключен"
+        GCODE_SEND = "gcode_send", "G-code отправлен"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

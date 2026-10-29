@@ -70,7 +70,7 @@ def derive_status(data):
 
     self_test = data.get("withSelfTest")
     if self_test is not None and 1 <= _float(self_test, 0) <= 99:
-        return base.PRINTING, "Самопроверка принтера"
+        return base.SELF_TEST, "Самопроверка принтера"
 
     filename = data.get("printFileName") or ""
     state = data.get("state")
@@ -255,6 +255,9 @@ class CrealityNativeClient(base.BaseClient):
     def heaters_off(self):
         self._run(self._session().run(send={"method": "set", "params": {"gcodeCmd": "M104 S0"}}))
         self._set(gcodeCmd="M140 S0")
+
+    def gcode(self, script):
+        self._set(gcodeCmd=script)
 
     def set_light(self, on):
         self._set(lightSw=1 if on else 0)
