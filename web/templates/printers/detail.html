@@ -85,7 +85,7 @@
       {% for f in files %}<tr>
         <td><img class="file-thumb" src="{% url 'printer_file_thumbnail' printer.pk f.path %}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></td>
         <td class="file-path" title="{{ f.path }}">{{ f.path|basename }}</td><td class="num">{{ f.size|filesize }}</td><td>{{ f.modified|unix_date }}</td>
-        <td class="num row" style="justify-content:flex-end;gap:6px;flex-wrap:nowrap">
+        <td class="num"><div class="row" style="justify-content:flex-end;gap:6px;flex-wrap:nowrap">
           {% if printer|can:"start_file" and state.status == "ready" %}<form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" data-busy="Печать ставится…" onsubmit="return confirm('Запустить печать «{{ f.path|escapejs }}» на {{ printer.name|escapejs }}? Стол должен быть пуст.')">{% csrf_token %}<input type="hidden" name="filename" value="{{ f.path }}"><input type="hidden" name="next" value="?tab=files"><button class="btn sm pri">Печать</button></form>{% endif %}
           {% if printer|can:"rename_file" or printer|can:"delete_file" %}
           <details class="menu-wrap">
@@ -96,7 +96,7 @@
             </div>
           </details>
           {% endif %}
-        </td></tr>
+        </div></td></tr>
       {% empty %}<tr><td colspan="5" class="muted">Файлов нет</td></tr>{% endfor %}
     </table></div>{% endif %}
   </div>
