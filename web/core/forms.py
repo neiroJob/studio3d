@@ -3,7 +3,7 @@ from django.utils import timezone
 
 from accounts.forms import PasswordPairMixin, password_fields
 
-from .models import ElectricityTariff, StudioSettings, timezone_choices
+from .models import ElectricityTariff, StockGroup, StockItem, StudioSettings, timezone_choices
 
 
 class SetupForm(PasswordPairMixin, forms.Form):
@@ -41,3 +41,21 @@ class TariffForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["valid_from"].initial = timezone.localdate()
+
+
+class StockGroupForm(forms.ModelForm):
+    class Meta:
+        model = StockGroup
+        fields = ["name", "order"]
+
+
+class StockItemForm(forms.ModelForm):
+    class Meta:
+        model = StockItem
+        fields = ["group", "name", "unit", "quantity", "min_quantity", "note"]
+        widgets = {"note": forms.TextInput()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["group"].queryset = StockGroup.objects.all()
+        self.fields["group"].empty_label = None

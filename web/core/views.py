@@ -8,16 +8,16 @@ from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
 from django.db import connection, transaction
 from django.http import FileResponse, Http404, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.roles import ROLE_ADMIN, has_right, right_required, user_rights
 
 from . import audit
-from .forms import SetupForm, StudioSettingsForm, TariffForm
+from .forms import SetupForm, StockGroupForm, StockItemForm, StudioSettingsForm, TariffForm
 from .middleware import setup_done
-from .models import AuditLog, ElectricityTariff, StudioSettings
+from .models import AuditLog, ElectricityTariff, StockGroup, StockItem, StudioSettings
 
 User = get_user_model()
 BACKUP_NAME_RE = re.compile(r"^studio3d_[0-9_-]+\.dump$")
@@ -144,6 +144,67 @@ def journal(request):
             "action": action,
         },
     )
+
+
+# --- Склад -------------------------------------------------------------------------------------
+
+
+@right_required("stock_income", "stock_writeoff")
+def stock(request):
+    groups = StockGroup.objects.prefetch_related("items")
+    return render(request, "core/stock.html", {"groups": groups})
+
+
+@right_required("stock_income")
+def stock_group_edit(request, pk=None):
+    group = get_object_or_404(StockGroup, pk=pk) if pk else None
+    form = StockGroupForm(request.POST or None, instance=group)
+    if request.method == "POST" and form.is_valid():
+        saved = form.save()
+        action = audit.Action.STOCK_GROUP_UPDATE if group else audit.Action.STOCK_GROUP_CREATE
+        audit.log(request, action, target=saved.name)
+        messages.success(request, f"Группа «{saved.name}» сохранена.")
+        return redirect("stock")
+    return render(request, "core/stock_group_form.html", {"form": form, "group": group})
+
+
+@right_required("stock_income")
+@require_POST
+def stock_group_delete(request, pk):
+    group = get_object_or_404(StockGroup, pk=pk)
+    if group.items.exists():
+        messages.error(request, "В группе есть позиции — сначала перенесите или удалите их.")
+    else:
+        name = group.name
+        group.delete()
+        audit.log(request, audit.Action.STOCK_GROUP_DELETE, target=name)
+        messages.success(request, f"Группа «{name}» удалена.")
+    return redirect("stock")
+
+
+@right_required("stock_income")
+def stock_item_edit(request, pk=None):
+    item = get_object_or_404(StockItem, pk=pk) if pk else None
+    form = StockItemForm(request.POST or None, instance=item)
+    if request.method == "POST" and form.is_valid():
+        saved = form.save()
+        action = audit.Action.STOCK_ITEM_UPDATE if item else audit.Action.STOCK_ITEM_CREATE
+        audit.log(request, action, target=saved.name, quantity=str(saved.quantity))
+        messages.success(request, f"Позиция «{saved.name}» сохранена.")
+        return redirect("stock")
+    return render(request, "core/stock_item_form.html", {"form": form, "item": item})
+
+
+@right_required("stock_income")
+@require_POST
+def stock_item_archive(request, pk):
+    item = get_object_or_404(StockItem, pk=pk)
+    item.is_archived = not item.is_archived
+    item.save(update_fields=["is_archived"])
+    audit.log(request, audit.Action.STOCK_ITEM_ARCHIVE, target=item.name, is_archived=item.is_archived)
+    verb = "перемещена в архив" if item.is_archived else "восстановлена"
+    messages.success(request, f"Позиция «{item.name}» {verb}.")
+    return redirect("stock")
 
 
 def _backup_files():

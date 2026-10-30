@@ -62,6 +62,50 @@ class ElectricityTariff(models.Model):
         return cls.objects.filter(valid_from__lte=date).first()
 
 
+class StockGroup(models.Model):
+    """Группа позиций склада: пластик, сопла, запчасти, расходники, готовые изделия (ROADMAP.md, «Склад»)."""
+
+    name = models.CharField("Название", max_length=100, unique=True)
+    order = models.PositiveIntegerField("Порядок", default=0)
+
+    class Meta:
+        ordering = ["order", "name"]
+        verbose_name = "группа склада"
+        verbose_name_plural = "группы склада"
+
+    def __str__(self):
+        return self.name
+
+
+class StockItem(models.Model):
+    """Позиция склада. Остаток пока учитывается вручную — автосписание появится отдельной задачей."""
+
+    group = models.ForeignKey(
+        StockGroup, on_delete=models.PROTECT, related_name="items", verbose_name="Группа"
+    )
+    name = models.CharField("Название", max_length=200)
+    unit = models.CharField("Единица", max_length=20, default="шт")
+    quantity = models.DecimalField("Остаток", max_digits=10, decimal_places=2, default=0)
+    min_quantity = models.DecimalField(
+        "Минимальный остаток", max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    note = models.CharField("Заметка", max_length=255, blank=True)
+    is_archived = models.BooleanField("В архиве", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["group__order", "group__name", "name"]
+        verbose_name = "позиция склада"
+        verbose_name_plural = "позиции склада"
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_low(self):
+        return self.min_quantity is not None and self.quantity < self.min_quantity
+
+
 class AuditLog(models.Model):
     """Журнал действий: кто, когда, что (ТЗ, раздел 3)."""
 
@@ -93,6 +137,12 @@ class AuditLog(models.Model):
         PLATE_CLEARED = "plate_cleared", "Изделие снято"
         PRINTER_LIGHT = "printer_light", "Свет принтера"
         HEATERS_OFF = "heaters_off", "Нагрев выключен"
+        STOCK_GROUP_CREATE = "stock_group_create", "Группа склада создана"
+        STOCK_GROUP_UPDATE = "stock_group_update", "Группа склада изменена"
+        STOCK_GROUP_DELETE = "stock_group_delete", "Группа склада удалена"
+        STOCK_ITEM_CREATE = "stock_item_create", "Позиция склада создана"
+        STOCK_ITEM_UPDATE = "stock_item_update", "Позиция склада изменена"
+        STOCK_ITEM_ARCHIVE = "stock_item_archive", "Позиция склада архивирована/восстановлена"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

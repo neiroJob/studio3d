@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Позиция «{{ item.name }}»{% else %}Новая позиция{% endif %}{% endblock %}
+{% block heading %}{% if item %}Позиция «{{ item.name }}»{% else %}Новая позиция{% endif %}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:480px">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="form">
+    {% for field in form %}{% include "_field.html" with field=field %}{% endfor %}
+  </div>
+  <p class="hint">Остаток и минимальный остаток пока меняются здесь вручную — автосписание по печати появится отдельной задачей.</p>
+  <div class="form-actions"><button class="btn pri" type="submit">Сохранить</button><a class="btn" href="{% url 'stock' %}">Отмена</a></div>
+</form>
+{% endblock %}

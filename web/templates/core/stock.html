@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Склад{% endblock %}
+{% block heading %}Склад{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="row" style="margin-bottom:12px">
+    <span class="muted small">Остаток пока ведётся вручную. Автосписание по печати и QR-наклейки — отдельные задачи.</span>
+    <span class="spacer"></span>
+    {% if "stock_income" in rights %}
+    <a class="btn" href="{% url 'stock_group_create' %}">Добавить группу</a>
+    <a class="btn pri" href="{% url 'stock_item_create' %}">Добавить позицию</a>
+    {% endif %}
+  </div>
+  {% for group in groups %}
+  <h2 class="row">{{ group.name }}<span class="spacer"></span>
+    {% if "stock_income" in rights %}
+    <a class="btn sm" href="{% url 'stock_group_edit' group.pk %}">Изменить группу</a>
+    <form class="inline" method="post" action="{% url 'stock_group_delete' group.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить группу</button></form>
+    {% endif %}
+  </h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Название</th><th class="num">Остаток</th><th>Ед.</th><th class="num">Минимум</th><th>Заметка</th><th></th></tr>
+    {% for item in group.items.all %}
+    <tr class="{% if item.is_archived %}off{% endif %}">
+      <td><b>{{ item.name }}</b>{% if item.is_archived %} <span class="pill">архив</span>{% endif %}</td>
+      <td class="num">{{ item.quantity }}{% if item.is_low %} <span class="pill c" style="--c:var(--err)">мало</span>{% endif %}</td>
+      <td>{{ item.unit }}</td>
+      <td class="num">{{ item.min_quantity|default:"—" }}</td>
+      <td>{{ item.note|default:"—" }}</td>
+      <td class="num">
+        {% if "stock_income" in rights %}
+        <a class="btn sm" href="{% url 'stock_item_edit' item.pk %}">Изменить</a>
+        <form class="inline" method="post" action="{% url 'stock_item_archive' item.pk %}">{% csrf_token %}<button class="btn sm" type="submit">{% if item.is_archived %}Восстановить{% else %}В архив{% endif %}</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="muted">Позиций в группе нет</td></tr>{% endfor %}
+  </table></div>
+  {% empty %}
+  <p class="muted">Групп склада пока нет{% if "stock_income" in rights %} — начните с кнопки «Добавить группу» выше{% endif %}.</p>
+  {% endfor %}
+</div>
+{% endblock %}

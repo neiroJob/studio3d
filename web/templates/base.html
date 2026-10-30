@@ -12,6 +12,7 @@
     <nav class="nav">
       <a href="{% url 'dashboard' %}" class="{% if url == 'dashboard' or url == 'printer_detail' %}on{% endif %}">Дашборд</a>
       {% if "printers_manage" in rights %}<a href="{% url 'printer_add' %}" class="{% if url == 'printer_add' %}on{% endif %}">Добавить принтер</a>{% endif %}
+      {% if "stock_income" in rights or "stock_writeoff" in rights %}<a href="{% url 'stock' %}" class="{% if url == 'stock' or url == 'stock_group_create' or url == 'stock_group_edit' or url == 'stock_item_create' or url == 'stock_item_edit' %}on{% endif %}">Склад</a>{% endif %}
       {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
         <div class="nav-group">Администрирование</div>
       {% endif %}
