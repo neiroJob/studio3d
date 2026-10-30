@@ -24,7 +24,7 @@ Studio3D shows everything that happens in a 3D printing studio in one place: whi
 on the bed, how much time is left, what failed and why, and how many hours each machine has worked. It runs on your
 own server inside the studio network — no cloud account, no subscription, nothing installed on the printers.
 
-> **Status: stage 3 of 11 — printers.** Pre-1.0, under active development. Available today:
+> **Status: stage 3 — printers.** Pre-1.0, under active development. Available today:
 > - foundation: Docker install, first-run wizard, login with brute-force protection, roles and permissions, users,
 >   electricity tariffs, audit log, daily database backups;
 > - printers: adding a printer, live dashboard, printer card with camera and light, pause / resume / cancel,
@@ -79,9 +79,12 @@ All screenshots use synthetic demo data (`python manage.py demo_data`); they con
 
 ### Roadmap highlights
 
-Telegram notifications and camera timelapses · filament stock with automatic consumption · CRM and exact job cost
-(filament, electricity, depreciation, rent) · maintenance schedules · MQTT devices (smart plugs, climate control) ·
-more printer models · extension packages · English UI. Full plan: [ROADMAP.md](ROADMAP.md).
+CRM: customers with legal details and contacts, orders with files (3mf, G-code, STL), receipts and contracts,
+kanban board, global search · price calculator and quotes, payments · stock: filament spools with automatic
+consumption after each print, parts, finished goods, purchasing, QR labels · product catalog with print recipes ·
+print queue and scheduler, AI failure detection · Telegram and Max bots with camera snapshots and alerts ·
+statistics · order status link and request form for customers · more printer models · maintenance · MQTT devices ·
+off-site backups · English UI. The order is not fixed yet. Full plan: [ROADMAP.md](ROADMAP.md).
 
 ## Supported printers
 
@@ -105,6 +108,10 @@ Any Klipper printer with Moonraker should work with a new profile — see
 
 Requirements: Ubuntu Server 22.04 / 24.04 / 26.04 (any Linux with Docker should work), Docker Engine with the
 Compose plugin, and network access from the server to the printers.
+
+> **Give every printer a fixed IP address** (a DHCP reservation in your router is the easiest way). Studio3D
+> connects to the address entered when the printer was added; if the router hands out a different one, the
+> printer shows as offline.
 
 ```bash
 git clone https://github.com/neiroJob/studio3d.git
