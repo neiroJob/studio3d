@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Студия 3D — макет карточек заказа и клиента</title>
+<style>
+:root{
+  --bg:#E8ECF0; --panel:#FFFFFF; --panel2:#F3F5F7; --ink:#17202B; --ink2:#4E5A68; --ink3:#7A8693;
+  --line:#D2D9E0; --accent:#9C7426; --accent-soft:#F3E8D2; --accent-ink:#FFFFFF;
+  --st-print:#1D7F70; --st-pause:#B7740F; --st-err:#BC3434; --st-done:#5B4BC4; --st-idle:#3E6FA8; --st-off:#8A949E;
+  --shadow:0 1px 2px rgba(23,32,43,.06); color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161C; --panel:#19212A; --panel2:#202933; --ink:#E5EAF0; --ink2:#A3AFBC; --ink3:#7B8794;
+    --line:#2D3843; --accent:#D3A64C; --accent-soft:#3A3020; --accent-ink:#17120A;
+    --st-print:#3BB39F; --st-pause:#E0A23A; --st-err:#E46262; --st-done:#9688F0; --st-idle:#6FA0DA; --st-off:#6E7883;
+    --shadow:none; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11161C; --panel:#19212A; --panel2:#202933; --ink:#E5EAF0; --ink2:#A3AFBC; --ink3:#7B8794;
+  --line:#2D3843; --accent:#D3A64C; --accent-soft:#3A3020; --accent-ink:#17120A;
+  --st-print:#3BB39F; --st-pause:#E0A23A; --st-err:#E46262; --st-done:#9688F0; --st-idle:#6FA0DA; --st-off:#6E7883;
+  --shadow:none; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:inherit}
+[hidden]{display:none!important}
+.top{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:10px 22px;flex-wrap:wrap}
+.top b{font-size:16px}
+.rolebox{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.rolebox select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel2)}
+main{padding:22px;max-width:1360px;margin:0 auto}
+.note{background:var(--accent-soft);border-radius:8px;padding:9px 13px;font-size:13px;color:var(--ink2);margin-bottom:16px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--panel2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.warn{color:var(--st-err);border-color:color-mix(in srgb,var(--st-err) 40%,var(--line))}
+.btn.sm{padding:4px 9px;font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;box-shadow:var(--shadow)}
+.panel h2{font-size:16px;margin:0 0 12px;font-weight:600}
+.panel h3{font-size:14px;margin:16px 0 8px;font-weight:600}
+.stack{display:grid;gap:16px}
+.g21{display:grid;gap:16px;align-items:start;grid-template-columns:2fr 1fr}
+.muted{color:var(--ink3)}
+.small{font-size:13px}
+.hint{font-size:12px;color:var(--ink3)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+/* header */
+.head{display:grid;gap:12px}
+.head h1{margin:0;font-size:22px;font-weight:600}
+.head .sub{color:var(--ink2);font-size:14px}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.pill.c{border-color:transparent;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c);font-weight:600}
+.tag{font-size:12px;border-radius:5px;padding:1px 8px;background:var(--accent-soft);color:var(--ink2)}
+/* stepper */
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps button{font-size:13px;padding:4px 11px;border-radius:14px;background:var(--panel2);color:var(--ink3);border:1px solid transparent;cursor:pointer}
+.steps button.past{color:var(--ink2)}
+.steps button.on{background:var(--accent-soft);color:var(--ink);font-weight:600;border-color:var(--accent)}
+.steps button:disabled{cursor:default}
+/* summary */
+.sum{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sum.three{grid-template-columns:repeat(3,1fr)}
+.sum>div{padding:12px 16px;border-right:1px solid var(--line);min-width:0}
+.sum>div:last-child{border-right:0}
+.sum small{display:block;font-size:12px;color:var(--ink3)}
+.sum b{font-size:20px;line-height:1.25;display:block}
+.sum .sub{font-size:13px;color:var(--ink2)}
+.bar{height:6px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;min-width:80px}
+.bar i{display:block;height:100%;background:var(--c,var(--st-print))}
+.over{color:var(--st-err)}
+/* tabs, tables */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 16px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:9px 14px;cursor:pointer;color:var(--ink2);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabs .n{font-size:12px;color:var(--ink3);margin-left:4px}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-weight:500;color:var(--ink3);text-align:left;font-size:13px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right}
+tr.total td{border-bottom:0;font-weight:600}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--panel2)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px;margin:0}
+.kv dt{color:var(--ink3)}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;padding:4px 0}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
+.field input,.field select,.field textarea{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:14px}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 16px}
+.field.wide{grid-column:1/-1}
+.file{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.file:last-child{border-bottom:0}
+.file .ic{width:34px;height:34px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;font-size:11px;color:var(--ink2);flex:none}
+.file div.t{min-width:0;flex:1}
+.file div.t b{display:block;font-weight:500;overflow-wrap:anywhere}
+.person{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel2)}
+.person+.person{margin-top:8px}
+.person b{display:block}
+.timeline{display:grid;gap:0}
+.timeline>div{padding:10px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:110px 1fr;gap:10px}
+.timeline>div:last-child{border-bottom:0}
+.timeline .when{font-size:13px;color:var(--ink3)}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--ink2);font-size:14px}
+.deny{border:1px dashed var(--ink3);border-radius:10px;padding:28px;text-align:center;color:var(--ink2)}
+.lock{font-size:12px;color:var(--ink3)}
+/* role: operator sees order without client / money */
+body.op .mgr{display:none!important}
+/* modal & toast */
+.modal-back{position:fixed;inset:0;background:rgba(10,14,19,.5);display:none;align-items:flex-start;justify-content:center;padding:6vh 14px;z-index:50;overflow-y:auto}
+.modal-back.open{display:flex}
+.modal{background:var(--panel);border-radius:12px;width:100%;max-width:560px;border:1px solid var(--line)}
+.modal header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal header h2{margin:0;font-size:17px}
+.modal .body{padding:18px}
+.modal footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.x{border:0;background:none;font-size:22px;cursor:pointer;color:var(--ink3);line-height:1}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:90vw}
+.toast.show{opacity:1}
+@media (max-width:1000px){.sum{grid-template-columns:1fr 1fr}.sum>div:nth-child(2){border-right:0}.sum>div:nth-child(-n+2){border-bottom:1px solid var(--line)}.sum.three{grid-template-columns:1fr 1fr}.sum.three>div:nth-child(3){border-bottom:0}}
+.g21>*{min-width:0}
+@media (max-width:820px){.g21{grid-template-columns:minmax(0,1fr)}main{padding:14px}.top{padding:10px 14px}.timeline>div{grid-template-columns:1fr;gap:2px}.rolebox label{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <b>Макет карточек CRM</b>
+  <div class="row" role="tablist" aria-label="Экран">
+    <button class="btn sm pri" data-screen="order" id="b-order">Карточка заказа</button>
+    <button class="btn sm" data-screen="client" id="b-client">Карточка клиента</button>
+  </div>
+  <span class="spacer"></span>
+  <div class="rolebox"><label for="role">Смотреть как</label>
+    <select id="role"><option value="mgr">Менеджер</option><option value="op">Оператор</option></select></div>
+  <button class="btn sm" id="theme">Тема</button>
+</div>
+
+<main>
+<div class="note">Макет для согласования. Данные придуманные, кнопки показывают поведение, но ничего не сохраняют. Переключайте экран, роль и тему сверху.</div>
+
+<!-- ============ КАРТОЧКА ЗАКАЗА ============ -->
+<section id="s-order">
+  <div class="row" style="margin-bottom:12px"><a href="#" class="small muted" data-toast="Возврат к списку заказов">← Заказы</a><span class="spacer"></span><a href="#" class="small muted" data-toast="Доска заказов (канбан)">Открыть на доске</a></div>
+
+  <div class="panel head">
+    <div class="row">
+      <h1>Заказ З-0145</h1>
+      <span class="pill c" id="o-pill" style="--c:var(--st-print)">В печати</span>
+      <span class="pill c over" style="--c:var(--st-pause)" id="o-due-pill">срок через 3 дня</span>
+      <span class="spacer"></span>
+      <button class="btn mgr" data-toast="Сообщение клиенту в Telegram">Написать клиенту</button>
+      <button class="btn mgr" data-act="link">Ссылка для клиента</button>
+      <button class="btn" data-toast="Заказ скопирован: изделия, файлы и цена">Повторить заказ</button>
+      <button class="btn" data-act="more">⋯</button>
+    </div>
+    <div class="sub mgr">Клиент: <a href="#" data-screen="client"><b>ИП Соколов А. В.</b></a> · контакт Соколов Андрей, +7 903 774-02-11 · принят 26.10.2026 · ответственный Анна</div>
+    <div class="sub op" hidden>Заказ обезличен: клиента, контактов и цен вы не видите. · принят 26.10.2026 · ответственный Анна</div>
+    <div>
+      <div class="small muted" style="margin-bottom:6px">Статус (нажмите на этап, чтобы перейти)</div>
+      <div class="steps" id="o-steps"></div>
+    </div>
+  </div>
+
+  <div class="sum" style="margin:16px 0">
+    <div><small>Срок</small><b>30.10.2026</b><span class="sub">через 3 дня</span></div>
+    <div><small>Изделия</small><b>30 / 80 шт.</b><div class="bar" style="margin-top:6px;--c:var(--st-print)"><i style="width:37.5%"></i></div></div>
+    <div class="mgr"><small>Оплата</small><b>7 000 / 14 200 ₽</b><span class="sub over">остаток 7 200 ₽</span></div>
+    <div class="mgr"><small>Маржа (оценка)</small><b id="o-margin">—</b><span class="sub" id="o-margin-sub"></span></div>
+    <div class="op" hidden><small>Сейчас печатается</small><b>Q1Pro-01</b><span class="sub">корпус × 10, 12 %, осталось 6 ч 40 мин</span></div>
+    <div class="op" hidden><small>Ответственный</small><b>Анна</b><span class="sub">менеджер заказа</span></div>
+  </div>
+
+  <div class="g21">
+   <div>
+    <div class="tabs" id="o-tabs">
+      <button data-otab="items" class="on">Изделия<span class="n">2</span></button>
+      <button data-otab="print">Печать<span class="n">3</span></button>
+      <button data-otab="files">Файлы<span class="n">9</span></button>
+      <button data-otab="money" class="mgr">Деньги</button>
+      <button data-otab="log">Журнал</button>
+    </div>
+
+    <!-- Изделия -->
+    <div class="panel" data-opane="items">
+      <div class="row"><h2 style="margin:0">Изделия</h2><span class="spacer"></span><button class="btn sm" data-act="newitem">Добавить изделие</button></div>
+      <div class="tbl-wrap"><table style="margin-top:8px"><tr><th>Изделие</th><th class="num">Заказано</th><th>Пластик (катушка)</th><th class="num">Вес шт.</th><th class="num mgr">Цена шт.</th><th class="num mgr">Сумма</th><th>Напечатано</th></tr>
+        <tr><td><b>Корпус датчика v3</b><div class="hint">korpus_datchika_v3.3mf</div></td><td class="num">40</td><td>ASA, серый<div class="hint">S-021, на Q1Pro-01</div></td><td class="num">41 г</td><td class="num mgr">250 ₽</td><td class="num mgr">10 000 ₽</td>
+          <td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="--c:var(--st-print);width:90px"><i style="width:25%"></i></div><span class="small">10 / 40</span></div></td></tr>
+        <tr><td><b>Крышка корпуса</b><div class="hint">kryshka_v3.3mf</div></td><td class="num">40</td><td>ASA, серый<div class="hint">S-021</div></td><td class="num">9 г</td><td class="num mgr">105 ₽</td><td class="num mgr">4 200 ₽</td>
+          <td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="--c:var(--st-print);width:90px"><i style="width:50%"></i></div><span class="small">20 / 40</span></div></td></tr>
+        <tr class="total mgr"><td colspan="5">Итого по заказу</td><td class="num">14 200 ₽</td><td></td></tr>
+      </table></div>
+      <p class="hint">Принтер в заказе не выбирается: принтер и катушка привязываются при запуске печати, задания попадают в заказ сами.</p>
+    </div>
+
+    <!-- Печать -->
+    <div class="panel" data-opane="print" hidden>
+      <div class="row"><h2 style="margin:0">Задания печати</h2><span class="spacer"></span><button class="btn sm" data-toast="Привязка задания с принтера к заказу">Привязать задание</button></div>
+      <div class="tbl-wrap"><table style="margin-top:8px"><tr><th>Когда</th><th>Принтер</th><th>Изделие</th><th class="num">Время</th><th class="num">Пластик</th><th>Результат</th><th></th></tr>
+        <tr><td>27.10 09:12</td><td><b>Q1Pro-01</b></td><td>Корпус × 10</td><td class="num">0 ч 55 мин из 7 ч 35 мин</td><td class="num">412 г</td><td><span class="pill c" style="--c:var(--st-print)">Идёт, 12 %</span></td><td><button class="btn sm" data-toast="Открыт принтер Q1Pro-01">К принтеру</button></td></tr>
+        <tr><td>26.10 21:40</td><td><b>Q1Pro-01</b></td><td>Корпус × 10</td><td class="num">6 ч 05 мин</td><td class="num">405 г</td><td><span class="pill c" style="--c:var(--st-done)">Успех</span></td><td><button class="btn sm" data-toast="Таймлапс (макет)">Таймлапс</button></td></tr>
+        <tr><td>26.10 15:10</td><td><b>Q2-01</b></td><td>Крышка × 20</td><td class="num">2 ч 40 мин</td><td class="num">182 г</td><td><span class="pill c" style="--c:var(--st-done)">Успех</span></td><td><button class="btn sm" data-toast="Таймлапс (макет)">Таймлапс</button></td></tr>
+      </table></div>
+      <h3>Что ещё напечатать</h3>
+      <p class="small" style="margin:0">Корпус: 20 шт. (2 задания по 10), крышка: 20 шт. (1 задание). Примерно 14 ч печати.</p>
+    </div>
+
+    <!-- Файлы -->
+    <div class="panel" data-opane="files" hidden>
+      <div class="row"><h2 style="margin:0">Файлы заказа</h2><span class="spacer"></span><button class="btn sm" data-toast="Выбор файлов (макет)">Загрузить</button><button class="btn sm" data-toast="Архив заказа скачивается (макет)">Скачать всё</button></div>
+      <h3>Для печати</h3>
+      <div class="file"><div class="ic">3MF</div><div class="t"><b>korpus_datchika_v3.3mf</b><span class="hint">проект OrcaSlicer · версия 2 от 25.10, Анна · предыдущая v1 сохранена</span></div><button class="btn sm" data-toast="История версий файла">Версии (2)</button></div>
+      <div class="file"><div class="ic">G</div><div class="t"><b>korpus_datchika_v3.gcode</b><span class="hint">нарезан под Q1 Pro · 41 г × 10 шт.</span></div></div>
+      <div class="file"><div class="ic">STL</div><div class="t"><b>kryshka_v3.stl</b><span class="hint">модель клиента</span></div></div>
+      <h3 class="mgr">Материалы клиента</h3>
+      <div class="file mgr"><div class="ic">PDF</div><div class="t"><b>eskiz_korpusa_ot_klienta.pdf</b><span class="hint">макет заказчика · 24.10</span></div></div>
+      <div class="file"><div class="ic">JPG</div><div class="t"><b>foto_gotovogo_obraztsa.jpg</b><span class="hint">фото пробной печати · 25.10</span></div></div>
+      <h3 class="mgr">Документы</h3>
+      <div class="file mgr"><div class="ic">PDF</div><div class="t"><b>Счёт № 58 от 26.10.2026</b><span class="hint">14 200 ₽ · оплачен частично</span></div><button class="btn sm" data-toast="Счёт скачивается (макет)">Скачать</button></div>
+      <div class="file mgr"><div class="ic">PDF</div><div class="t"><b>Договор № 12 от 03.07.2026</b><span class="hint">общий с клиентом</span></div></div>
+      <div class="file mgr"><div class="ic">JPG</div><div class="t"><b>chek_26-10.jpg</b><span class="hint">чек на предоплату 5 000 ₽</span></div></div>
+    </div>
+
+    <!-- Деньги -->
+    <div class="mgr" data-opane="money" hidden>
+     <div class="stack">
+      <div class="panel">
+        <div class="row"><h2 style="margin:0">Платежи</h2><span class="spacer"></span><button class="btn sm pri" data-act="pay">Добавить платёж</button></div>
+        <div class="tbl-wrap"><table style="margin-top:8px" id="pay-tbl"><tr><th>Дата</th><th class="num">Сумма</th><th>Способ</th><th>Документ</th><th>Кто внёс</th></tr>
+          <tr><td>27.10.2026</td><td class="num">2 000 ₽</td><td>Безнал, по счёту № 58</td><td>платёжное поручение</td><td>Анна</td></tr>
+          <tr><td>26.10.2026</td><td class="num">5 000 ₽</td><td>Перевод на карту</td><td>чек</td><td>Анна</td></tr>
+        </table></div>
+        <div class="sum three" style="margin-top:14px"><div><small>Цена для клиента</small><b>14 200 ₽</b></div><div><small>Оплачено</small><b id="paid">7 000 ₽</b></div><div><small>Остаток</small><b class="over" id="rest">7 200 ₽</b></div></div>
+      </div>
+      <div class="panel">
+        <div class="row"><h2 style="margin:0">Расчёт цены и маржи</h2><span class="spacer"></span><button class="btn sm" data-act="cost">Добавить статью</button></div>
+        <table style="margin-top:8px" id="cost-tbl"></table>
+        <p class="hint">Тарифы взяты на дату создания заказа и при их изменении не пересчитываются.</p>
+      </div>
+     </div>
+    </div>
+
+    <!-- Журнал -->
+    <div class="panel" data-opane="log" hidden>
+      <div class="row"><h2 style="margin:0">Журнал заказа</h2></div>
+      <div class="row" style="margin:6px 0 12px"><input class="field" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel)" placeholder="Комментарий к заказу" id="cmt"><button class="btn" data-act="comment">Добавить</button></div>
+      <div class="timeline" id="o-log">
+        <div><span class="when">27.10 09:12</span><span>Система: запущено задание на Q1Pro-01, корпус × 10</span></div>
+        <div><span class="when">27.10 08:30</span><span>Анна: платёж 2 000 ₽ по счёту № 58</span></div>
+        <div><span class="when">26.10 21:40</span><span>Система: задание на Q1Pro-01 завершено успешно (405 г)</span></div>
+        <div><span class="when">26.10 15:10</span><span>Игорь: статус «В очереди» → «В печати»</span></div>
+        <div><span class="when">26.10 11:02</span><span>Анна: клиент подтвердил макет, ждём предоплату → получена 5 000 ₽</span></div>
+        <div><span class="when">26.10 10:15</span><span>Анна: заказ создан</span></div>
+      </div>
+    </div>
+   </div>
+
+   <!-- правая колонка -->
+   <div class="stack">
+    <div class="panel">
+      <h2>Этапы работ</h2>
+      <label class="check"><input type="checkbox" checked> Нарезать</label>
+      <label class="check"><input type="checkbox" class="cl"> Напечатать <span class="hint">30 / 80</span></label>
+      <label class="check"><input type="checkbox" class="cl"> Постобработка <span class="hint">3 ч по плану</span></label>
+      <label class="check"><input type="checkbox" class="cl"> Упаковать</label>
+      <div class="small muted" id="cl-count" style="margin-top:6px">Готово 1 из 4</div>
+    </div>
+    <div class="panel mgr">
+      <h2>Клиент</h2>
+      <dl class="kv"><dt>Клиент</dt><dd><a href="#" data-screen="client">ИП Соколов А. В.</a></dd><dt>Контакт</dt><dd>Соколов Андрей<br><span class="muted">Telegram @sokolov_a</span></dd><dt>Телефон</dt><dd>+7 903 774-02-11</dd><dt>Долг клиента</dt><dd class="over">7 200 ₽ по этому заказу</dd></dl>
+      <div class="row" style="margin-top:12px"><span class="pill c" style="--c:var(--st-print)">Бот подключён</span><span class="spacer"></span><button class="btn sm" data-act="link">Ссылка для клиента</button></div>
+    </div>
+    <div class="panel">
+      <h2>Сроки</h2>
+      <dl class="kv"><dt>Принят</dt><dd>26.10.2026</dd><dt>Срок</dt><dd><b>30.10.2026</b></dd><dt>В статусе</dt><dd>«В печати» 1 день</dd><dt>Ответственный</dt><dd>Анна</dd></dl>
+      <p class="hint" style="margin-bottom:0">Если заказ просрочен или стоит в одном статусе дольше нормы, карточка и строка в списке подсвечиваются.</p>
+    </div>
+   </div>
+  </div>
+</section>
+
+<!-- ============ КАРТОЧКА КЛИЕНТА ============ -->
+<section id="s-client" hidden>
+  <div class="deny" id="c-deny" hidden><b>Нет доступа</b><br>Карточка клиента скрыта от роли «Оператор»: он видит заказ без клиента, контактов и цен.</div>
+  <div id="c-body">
+  <div class="row" style="margin-bottom:12px"><a href="#" class="small muted" data-toast="Возврат к списку клиентов">← Клиенты</a><span class="spacer"></span>
+    <label class="rolebox" for="ctype">Показать как <select id="ctype" style="padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel2)"><option value="ip">ИП</option><option value="ul">Юрлицо</option><option value="sz">Самозанятый</option><option value="fl">Физлицо</option></select></label></div>
+
+  <div class="panel head">
+    <div class="row">
+      <h1 id="c-name">ИП Соколов А. В.</h1>
+      <span class="pill" id="c-type">ИП</span>
+      <span class="tag">постоянный</span><span class="tag">опт</span><span class="tag">нужны закрывающие</span>
+      <button class="btn sm" data-toast="Добавить тег">+ тег</button>
+      <span class="spacer"></span>
+      <button class="btn" data-toast="Сообщение клиенту в Telegram">Написать</button>
+      <button class="btn" data-toast="Данные клиента можно править (макет)">Редактировать</button>
+      <button class="btn pri" data-toast="Откроется «Новый заказ» с этим клиентом">Новый заказ</button>
+    </div>
+    <div class="sub">Клиент с 03.07.2026 · основной контакт Соколов Андрей · общаемся в Telegram</div>
+  </div>
+
+  <div class="sum" style="margin:16px 0">
+    <div><small>Заказов</small><b>4</b><span class="sub">1 в работе</span></div>
+    <div><small>Сумма заказов</small><b>52 000 ₽</b><span class="sub">средний чек 13 000 ₽</span></div>
+    <div><small>Долг</small><b class="over">7 200 ₽</b><span class="sub">заказ З-0145, срок оплаты 30.10</span></div>
+    <div><small>Следующий контакт</small><b>30.10.2026</b><span class="sub">выдача З-0145, договориться об остатке</span></div>
+  </div>
+
+  <div class="g21">
+   <div>
+    <div class="tabs" id="c-tabs">
+      <button data-ctab="orders" class="on">Заказы<span class="n">4</span></button>
+      <button data-ctab="docs">Документы и файлы<span class="n">6</span></button>
+      <button data-ctab="notes">Заметки<span class="n">3</span></button>
+    </div>
+
+    <div class="panel" data-cpane="orders">
+      <div class="tbl-wrap"><table><tr><th>Номер</th><th>Принят</th><th>Что</th><th>Статус</th><th class="num">Цена</th><th class="num">Оплачено</th><th class="num">Долг</th></tr>
+        <tr class="click" data-screen="order"><td><b>З-0145</b></td><td>26.10.2026</td><td>Корпус и крышка датчика</td><td><span class="pill c" style="--c:var(--st-print)">В печати</span></td><td class="num">14 200 ₽</td><td class="num">7 000 ₽</td><td class="num over"><b>7 200 ₽</b></td></tr>
+        <tr class="click" data-toast="Откроется заказ З-0128"><td><b>З-0128</b></td><td>09.09.2026</td><td>Крепёж на DIN-рейку × 120</td><td><span class="pill c" style="--c:var(--st-done)">Выдан</span></td><td class="num">9 600 ₽</td><td class="num">9 600 ₽</td><td class="num">—</td></tr>
+        <tr class="click" data-toast="Откроется заказ З-0117"><td><b>З-0117</b></td><td>12.08.2026</td><td>Кожухи блока питания × 30</td><td><span class="pill c" style="--c:var(--st-off)">Закрыт</span></td><td class="num">21 300 ₽</td><td class="num">21 300 ₽</td><td class="num">—</td></tr>
+        <tr class="click" data-toast="Откроется заказ З-0102"><td><b>З-0102</b></td><td>03.07.2026</td><td>Пробная партия корпусов × 10</td><td><span class="pill c" style="--c:var(--st-off)">Закрыт</span></td><td class="num">6 900 ₽</td><td class="num">6 900 ₽</td><td class="num">—</td></tr>
+        <tr class="total"><td colspan="4">Итого</td><td class="num">52 000 ₽</td><td class="num">44 800 ₽</td><td class="num over">7 200 ₽</td></tr>
+      </table></div>
+      <div class="row" style="margin-top:12px"><span class="small muted">Строка открывает карточку заказа. «Повторить заказ» есть в карточке любого заказа.</span></div>
+    </div>
+
+    <div class="panel" data-cpane="docs" hidden>
+      <div class="row"><h2 style="margin:0">Документы и файлы клиента</h2><span class="spacer"></span><button class="btn sm" data-toast="Выбор файлов (макет)">Загрузить</button></div>
+      <h3>Договоры и закрывающие</h3>
+      <div class="file"><div class="ic">PDF</div><div class="t"><b>Договор № 12 от 03.07.2026</b><span class="hint">действует, общий на все заказы</span></div><button class="btn sm" data-toast="Скачивается (макет)">Скачать</button></div>
+      <div class="file"><div class="ic">PDF</div><div class="t"><b>Счёт № 58 от 26.10.2026</b><span class="hint">заказ З-0145 · 14 200 ₽</span></div><button class="btn sm" data-toast="Скачивается (макет)">Скачать</button></div>
+      <div class="file"><div class="ic">PDF</div><div class="t"><b>Акт № 41 от 14.09.2026</b><span class="hint">заказ З-0128</span></div><button class="btn sm" data-toast="Скачивается (макет)">Скачать</button></div>
+      <h3>Материалы клиента</h3>
+      <div class="file"><div class="ic">PDF</div><div class="t"><b>eskiz_korpusa_ot_klienta.pdf</b><span class="hint">заказ З-0145 · 24.10</span></div></div>
+      <div class="file"><div class="ic">STL</div><div class="t"><b>kryshka_v3.stl</b><span class="hint">заказ З-0145 · модель клиента</span></div></div>
+      <h3>Согласие на обработку персональных данных (152-ФЗ)</h3>
+      <div class="file"><div class="ic">PDF</div><div class="t"><b>Согласие от 03.07.2026</b><span class="hint">подписано, срок не ограничен, отзыв — по заявлению</span></div><span class="pill c" style="--c:var(--st-print)">Есть</span></div>
+    </div>
+
+    <div class="panel" data-cpane="notes" hidden>
+      <div class="row"><h2 style="margin:0">Заметки менеджера</h2></div>
+      <div class="form" style="margin:8px 0 12px">
+        <label class="field wide">Новая заметка<textarea rows="3" id="note-text" placeholder="Например: звонил, договорились..."></textarea></label>
+        <label class="field">Следующий контакт<input type="text" value="30.10.2026"></label>
+      </div>
+      <div class="row" style="margin-bottom:12px"><button class="btn pri" data-act="note">Сохранить заметку</button></div>
+      <div class="timeline" id="notes-log">
+        <div><span class="when">27.10 11:20<br>Анна</span><span>Звонил, просит ускорить. Договорились: забирает 30.10 до обеда, остаток 7 200 ₽ переведёт при получении.</span></div>
+        <div><span class="when">14.09 16:05<br>Игорь</span><span>Для документов нужен скан акта на почту бухгалтеру (Елена). Работаем по договору, оплата по счёту.</span></div>
+        <div><span class="when">03.07 12:30<br>Анна</span><span>Первый контакт по рекомендации. Делает корпуса для датчиков, ожидаются регулярные партии, возможен опт.</span></div>
+      </div>
+    </div>
+   </div>
+
+   <div class="stack">
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">Реквизиты</h2><span class="spacer"></span><button class="btn sm" data-toast="Реквизиты скопированы для счёта">Копировать</button></div>
+      <dl class="kv" id="c-req" style="margin-top:12px"></dl>
+      <p class="hint" id="c-req-hint" style="margin-bottom:0"></p>
+    </div>
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">Контактные лица</h2><span class="spacer"></span><button class="btn sm" data-toast="Добавить контактное лицо">+ Добавить</button></div>
+      <div style="margin-top:10px" id="c-persons"></div>
+    </div>
+    <div class="panel">
+      <h2>Telegram-бот</h2>
+      <div class="row"><span class="pill c" style="--c:var(--st-print)">Подключён</span><span class="small muted">Андрей получает старт, снимки и «заказ готов»</span></div>
+    </div>
+   </div>
+  </div>
+  </div>
+</section>
+</main>
+
+<div class="modal-back" id="mb"><div class="modal"><header><h2 id="m-title"></h2><button class="x" data-act="close" aria-label="Закрыть">×</button></header><div class="body" id="m-body"></div><footer id="m-foot"></footer></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const rub=n=>n.toLocaleString('ru-RU').replace(/ /g,' ')+' ₽';
+let toastT;
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),2200)}
+function modal(title,body,foot){$('#m-title').textContent=title;$('#m-body').innerHTML=body;$('#m-foot').innerHTML=foot||'<button class="btn" data-act="close">Закрыть</button>';$('#mb').classList.add('open')}
+function closeModal(){$('#mb').classList.remove('open')}
+
+/* ---- экран и роль ---- */
+let screen='order', role='mgr';
+function apply(){
+  $('#s-order').hidden=screen!=='order'; $('#s-client').hidden=screen!=='client';
+  $('#b-order').classList.toggle('pri',screen==='order'); $('#b-client').classList.toggle('pri',screen==='client');
+  document.body.classList.toggle('op',role==='op');
+  $$('.op[hidden], .op').forEach(e=>{ if(e.tagName!=='BODY') e.hidden=role!=='op' });
+  $('#c-deny').hidden=role!=='op'; $('#c-body').hidden=role==='op';
+  if(role==='op' && ['money'].includes(otab)) setOTab('items');
+  window.scrollTo(0,0);
+}
+$('#role').onchange=e=>{role=e.target.value;apply();toast(role==='op'?'Вид оператора: заказ без клиента, контактов и денег':'Вид менеджера')};
+$('#theme').onclick=()=>{const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;r.dataset.theme=dark?'light':'dark'};
+
+/* ---- статусы заказа ---- */
+const STAGES=[['Новый','--st-idle'],['На обсуждении','--st-idle'],['Ждёт оплаты','--st-pause'],['В очереди','--st-idle'],['В печати','--st-print'],['Постобработка','--st-pause'],['Готов, ждёт выдачи','--st-done'],['Выдан','--st-done'],['Закрыт','--st-off']];
+let cur=4;
+function renderSteps(){
+  $('#o-steps').innerHTML=STAGES.map((s,i)=>`<button data-step="${i}" class="${i===cur?'on':i<cur?'past':''}" ${role==='op'&&false?'disabled':''}>${i<cur?'✓ ':''}${s[0]}</button>`).join('')
+   +`<button data-step="p" style="margin-left:8px">На паузе</button><button data-step="x">Отменён</button>`;
+  const p=$('#o-pill'); const s=STAGES[cur]; p.textContent=s[0]; p.style.setProperty('--c',`var(${s[1]})`);
+}
+function log(text){const d=document.createElement('div');d.innerHTML=`<span class="when">сейчас</span><span></span>`;d.lastChild.textContent=text;$('#o-log').prepend(d)}
+$('#o-steps').onclick=e=>{const b=e.target.closest('[data-step]');if(!b)return;const k=b.dataset.step;
+  const from=STAGES[cur][0];
+  if(k==='p'||k==='x'){const n=k==='p'?'На паузе':'Отменён';log(`Анна: статус «${from}» → «${n}»`);toast('Статус: '+n+' (макет, дальше потребуется причина)');return}
+  const i=+k;if(i===cur)return;cur=i;renderSteps();log(`Анна: статус «${from}» → «${STAGES[cur][0]}»`);toast('Статус изменён: '+STAGES[cur][0])};
+
+/* ---- расчёт цены (по списку из согласования) ---- */
+const PRICE=14200;
+const COST=[
+ ['Пластик (стоимость изделия)','ASA серый, 2 000 г × 2,10 ₽/г',4200],
+ ['Электричество','29 кВт·ч × 6,80 ₽',197],
+ ['Простой принтера включённым','4,5 ч × 0,15 кВт × 6,80 ₽',5],
+ ['Доставка пластика','2 кг × 60 ₽/кг',120],
+ ['Амортизация оборудования','32,2 ч × 18 ₽/ч',580],
+ ['Постобработка','3 ч × 600 ₽/ч',1800],
+ ['Транспортировка заказа','доставка клиенту, СДЭК',450],
+ ['Налог','6 % от цены (УСН «доходы»)',Math.round(PRICE*0.06)]
+];
+function renderCost(){
+  const total=COST.reduce((s,r)=>s+r[2],0), m=PRICE-total, pc=Math.round(m/PRICE*100);
+  $('#cost-tbl').innerHTML=COST.map(r=>`<tr><td>${r[0]}<div class="hint">${r[1]}</div></td><td class="num">${rub(r[2])}</td></tr>`).join('')
+   +`<tr><td><b>Итого себестоимость</b></td><td class="num"><b>${rub(total)}</b></td></tr><tr><td>Цена для клиента</td><td class="num">${rub(PRICE)}</td></tr><tr class="total"><td>Маржа</td><td class="num">${rub(m)} (${pc} %)</td></tr>`;
+  $('#o-margin').textContent=rub(m); $('#o-margin-sub').textContent=pc+' % от цены, расчёт предварительный';
+}
+
+/* ---- вкладки заказа и клиента ---- */
+let otab='items', ctab='orders';
+function setOTab(t){otab=t;$$('#o-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.otab===t));$$('[data-opane]').forEach(p=>p.hidden=p.dataset.opane!==t)}
+function setCTab(t){ctab=t;$$('#c-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.ctab===t));$$('[data-cpane]').forEach(p=>p.hidden=p.dataset.cpane!==t)}
+$('#o-tabs').onclick=e=>{const b=e.target.closest('[data-otab]');if(b)setOTab(b.dataset.otab)};
+$('#c-tabs').onclick=e=>{const b=e.target.closest('[data-ctab]');if(b)setCTab(b.dataset.ctab)};
+
+/* ---- чек-лист ---- */
+function clCount(){const all=$$('#s-order .check input');$('#cl-count').textContent=`Готово ${all.filter(c=>c.checked).length} из ${all.length}`}
+$$('#s-order .check input').forEach(c=>c.onchange=clCount);
+
+/* ---- реквизиты по типу клиента ---- */
+const TYPES={
+ ip:{label:'ИП',name:'ИП Соколов А. В.',req:[['ИНН','500100732259'],['ОГРНИП','320500000012345'],['Адрес','Московская обл., г. Пример, ул. Заводская, 5'],['Банк','АО «Пример-Банк»'],['БИК','040000000'],['Расчётный счёт','40802 810 0 0000 0000000'],['Налог. режим','УСН «доходы», без НДС']],hint:'Документы: договор, счёт, акт. Реквизиты подставляются в шаблоны.'},
+ ul:{label:'Юрлицо',name:'ООО «Техномаш»',req:[['ИНН','7700000000'],['КПП','770001001'],['ОГРН','1027700000000'],['Юр. адрес','г. Москва, ул. Примерная, 1, оф. 12'],['Банк','АО «Пример-Банк»'],['БИК','040000000'],['Расчётный счёт','40702 810 0 0000 0000000'],['Подписант','Директор Иванов П. С.']],hint:'Документы: договор, счёт, акт или УПД. НДС по реквизитам.'},
+ sz:{label:'Самозанятый',name:'Кузнецов Илья',req:[['ИНН','500100000000'],['Статус','НПД (самозанятый)'],['Расчёт','перевод на карту, чек «Мой налог»']],hint:'Чек самозанятого прикрепляется к платежу. Договор по желанию.'},
+ fl:{label:'Физлицо',name:'Мельникова Ольга',req:[['Реквизиты','не требуются'],['Оплата','наличные или перевод, чек выдаётся'],['Согласие ПДн','обязательно, есть']],hint:'Документы: чек. Паспортные данные не собираются.'}
+};
+const PERSONS={
+ ip:[['Соколов Андрей','владелец · основной',['+7 903 774-02-11','Telegram @sokolov_a','Max: нет','sokolov@example.ru'],'Общаемся: Telegram'],['Елена','бухгалтерия',['+7 903 000-00-00','buh@example.ru'],'Общаемся: e-mail, только документы']],
+ ul:[['Иванов Пётр','закупки · основной',['+7 495 000-00-01','Telegram @ivanov_p','p.ivanov@example.ru'],'Общаемся: Telegram и телефон'],['Лебедева Мария','бухгалтерия',['+7 495 000-00-02','buh@example.ru'],'Общаемся: e-mail']],
+ sz:[['Кузнецов Илья','основной',['+7 926 000-00-03','Telegram @kuznetsov_i'],'Общаемся: Telegram']],
+ fl:[['Мельникова Ольга','основной',['+7 926 501-88-40','Telegram @melnikova'],'Общаемся: Telegram']]
+};
+function renderClient(t){
+  const T=TYPES[t];
+  $('#c-name').textContent=T.name; $('#c-type').textContent=T.label;
+  $('#c-req').innerHTML=T.req.map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join(''); $('#c-req-hint').textContent=T.hint;
+  $('#c-persons').innerHTML=PERSONS[t].map(p=>`<div class="person"><b>${p[0]} <span class="muted" style="font-weight:400">· ${p[1]}</span></b><div class="small">${p[2].join('<br>')}</div><div class="hint">${p[3]}</div></div>`).join('');
+}
+$('#ctype').onchange=e=>renderClient(e.target.value);
+
+/* ---- платежи, заметки, комментарии ---- */
+let paid=7000;
+function renderPay(){$('#paid').textContent=rub(paid);$('#rest').textContent=rub(PRICE-paid);$('#rest').classList.toggle('over',PRICE-paid>0)}
+
+document.addEventListener('click',e=>{
+  const sc=e.target.closest('[data-screen]');
+  if(sc){e.preventDefault();screen=sc.dataset.screen;apply();return}
+  const tt=e.target.closest('[data-toast]');
+  if(tt){e.preventDefault();toast(tt.dataset.toast);return}
+  const a=e.target.closest('[data-act]'); if(!a)return;
+  switch(a.dataset.act){
+    case 'close':closeModal();break;
+    case 'link':modal('Ссылка для клиента','<p>Клиент переходит по ссылке, бот привязывает его к заказу и присылает статус.</p><div class="field"><input readonly value="https://t.me/studio3d_print_bot?start=o0145-7f3k2"></div>','<button class="btn" data-act="close">Закрыть</button><button class="btn pri" data-toast="Ссылка скопирована" data-act="close">Скопировать</button>');break;
+    case 'more':modal('Действия с заказом','<div class="row" style="flex-direction:column;align-items:stretch"><button class="btn" data-toast="Коммерческое предложение PDF сформировано" data-act="close">Коммерческое предложение (PDF)</button><button class="btn" data-toast="Счёт сформирован из шаблона" data-act="close">Выставить счёт</button><button class="btn" data-toast="Заказ в архиве" data-act="close">В архив</button><button class="btn warn" data-toast="Заказ отменён" data-act="close">Отменить заказ</button></div>');break;
+    case 'newitem':modal('Добавить изделие','<div class="form"><label class="field wide">Название<input></label><label class="field">Количество<input type="number" value="1"></label><label class="field">Пластик<select><option>ASA</option><option>PETG</option><option>PLA</option><option>TPU</option></select></label><label class="field">Цвет<select><option>Серый</option><option>Чёрный</option><option>Белый</option></select></label><label class="field">Цена за штуку, ₽<input type="number"></label></div><p class="hint">Катушка и принтер будут выбраны при запуске печати.</p>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Изделие добавлено (макет)" data-act="close">Добавить</button>');break;
+    case 'pay':modal('Добавить платёж','<div class="form"><label class="field">Дата<input value="27.10.2026"></label><label class="field">Сумма, ₽<input type="number" id="pay-sum" value="7200"></label><label class="field">Способ<select><option>Безнал, по счёту</option><option>Перевод на карту</option><option>Наличные</option><option>Чек самозанятого</option></select></label><label class="field">Документ<input placeholder="чек, платёжное поручение"></label></div>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-act="paysave">Сохранить</button>');break;
+    case 'paysave':{const v=+$('#pay-sum').value||0;if(v>0){paid+=v;const tr=document.createElement('tr');tr.innerHTML=`<td>27.10.2026</td><td class="num">${rub(v)}</td><td>—</td><td>—</td><td>Анна</td>`;$('#pay-tbl').rows[0].after(tr);renderPay();log('Анна: платёж '+rub(v));}closeModal();toast('Платёж записан');break}
+    case 'cost':modal('Добавить статью','<div class="form"><label class="field">Статья<select><option>Расходник со склада</option><option>Брак</option><option>Другое</option></select></label><label class="field">Сумма, ₽<input type="number"></label><label class="field wide">Комментарий<input></label></div>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Статья добавлена (макет)" data-act="close">Добавить</button>');break;
+    case 'comment':{const v=$('#cmt').value.trim();if(v){log('Анна: '+v);$('#cmt').value=''}break}
+    case 'note':{const v=$('#note-text').value.trim();if(v){const d=document.createElement('div');d.innerHTML='<span class="when">сейчас<br>Анна</span><span></span>';d.lastChild.textContent=v;$('#notes-log').prepend(d);$('#note-text').value='';toast('Заметка сохранена')}break}
+  }
+  if(a.dataset.toast){toast(a.dataset.toast)}
+});
+$('#mb').addEventListener('click',e=>{if(e.target.id==='mb')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+renderSteps();renderCost();renderClient('ip');renderPay();clCount();apply();
+</script>
+</body>
+</html>
