@@ -1,9 +1,28 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from accounts.forms import PasswordPairMixin, password_fields
 
-from .models import ElectricityTariff, StockGroup, StockItem, StudioSettings, timezone_choices
+from .models import (
+    Client,
+    ClientDocument,
+    ClientNote,
+    ContactPerson,
+    ElectricityTariff,
+    Order,
+    OrderChecklistItem,
+    OrderCostLine,
+    OrderFile,
+    OrderItem,
+    OrderPayment,
+    StockGroup,
+    StockItem,
+    StudioSettings,
+    timezone_choices,
+)
+
+DATE_WIDGET = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
 
 class SetupForm(PasswordPairMixin, forms.Form):
@@ -59,3 +78,123 @@ class StockItemForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["group"].queryset = StockGroup.objects.all()
         self.fields["group"].empty_label = None
+
+
+# --- CRM ---------------------------------------------------------------------------------------
+
+
+class ClientForm(forms.ModelForm):
+    class Meta:
+        model = Client
+        fields = [
+            "kind",
+            "name",
+            "inn",
+            "kpp",
+            "ogrn",
+            "address",
+            "bank",
+            "bik",
+            "account",
+            "signer",
+            "tax_regime",
+            "pd_consent",
+            "tags",
+            "next_contact",
+        ]
+        widgets = {"next_contact": DATE_WIDGET}
+
+
+class ContactForm(forms.ModelForm):
+    class Meta:
+        model = ContactPerson
+        fields = ["name", "position", "phone", "telegram", "max_messenger", "email", "channel", "is_main"]
+
+
+class ClientNoteForm(forms.ModelForm):
+    class Meta:
+        model = ClientNote
+        fields = ["text"]
+        widgets = {"text": forms.Textarea(attrs={"rows": 3})}
+
+
+class ClientDocumentForm(forms.ModelForm):
+    class Meta:
+        model = ClientDocument
+        fields = ["kind", "title", "file"]
+
+
+class OrderForm(forms.ModelForm):
+    class Meta:
+        model = Order
+        fields = [
+            "client",
+            "contact",
+            "title",
+            "description",
+            "deadline",
+            "responsible",
+            "price",
+            "tax_percent",
+        ]
+        widgets = {
+            "deadline": DATE_WIDGET,
+            "description": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client"].queryset = Client.objects.filter(is_archived=False) | Client.objects.filter(
+            pk=self.instance.client_id
+        )
+        self.fields["client"].empty_label = None
+        contacts = ContactPerson.objects.select_related("client")
+        self.fields["contact"].queryset = contacts
+        self.fields["contact"].label_from_instance = lambda c: f"{c.name} ({c.client.name})"
+        self.fields["contact"].empty_label = "— не выбран —"
+        self.fields["responsible"].queryset = get_user_model().objects.filter(is_active=True)
+        self.fields["responsible"].label_from_instance = lambda u: u.first_name or u.username
+        self.fields["responsible"].empty_label = "— не назначен —"
+
+    def clean(self):
+        data = super().clean()
+        client, contact = data.get("client"), data.get("contact")
+        if client and contact and contact.client_id != client.pk:
+            self.add_error("contact", "Контактное лицо принадлежит другому клиенту.")
+        return data
+
+
+class OrderItemForm(forms.ModelForm):
+    class Meta:
+        model = OrderItem
+        fields = ["name", "quantity", "material", "color", "unit_price"]
+
+
+class PaymentForm(forms.ModelForm):
+    class Meta:
+        model = OrderPayment
+        fields = ["date", "amount", "method", "document"]
+        widgets = {"date": DATE_WIDGET}
+
+
+class CostLineForm(forms.ModelForm):
+    class Meta:
+        model = OrderCostLine
+        fields = ["kind", "amount", "note"]
+
+
+class ChecklistForm(forms.ModelForm):
+    class Meta:
+        model = OrderChecklistItem
+        fields = ["title"]
+
+
+class OrderFileForm(forms.ModelForm):
+    class Meta:
+        model = OrderFile
+        fields = ["title", "file", "comment"]
+        labels = {"title": "Название (повтор названия создаёт новую версию)"}
+
+
+class CommentForm(forms.Form):
+    text = forms.CharField(label="Комментарий", widget=forms.Textarea(attrs={"rows": 2}))

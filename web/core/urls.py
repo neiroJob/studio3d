@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_crm
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
@@ -15,6 +15,39 @@ urlpatterns = [
     path("stock/items/add/", views.stock_item_edit, name="stock_item_create"),
     path("stock/items/<int:pk>/", views.stock_item_edit, name="stock_item_edit"),
     path("stock/items/<int:pk>/archive/", views.stock_item_archive, name="stock_item_archive"),
+    path("clients/", views_crm.clients, name="clients"),
+    path("clients/add/", views_crm.client_edit, name="client_create"),
+    path("clients/<int:pk>/", views_crm.client_detail, name="client_detail"),
+    path("clients/<int:pk>/edit/", views_crm.client_edit, name="client_edit"),
+    path("clients/<int:pk>/archive/", views_crm.client_archive, name="client_archive"),
+    path("clients/<int:client_pk>/contacts/add/", views_crm.contact_edit, name="contact_create"),
+    path("contacts/<int:pk>/", views_crm.contact_edit, name="contact_edit"),
+    path("contacts/<int:pk>/delete/", views_crm.contact_delete, name="contact_delete"),
+    path("clients/<int:pk>/notes/add/", views_crm.note_add, name="note_add"),
+    path("notes/<int:pk>/delete/", views_crm.note_delete, name="note_delete"),
+    path("clients/<int:pk>/documents/add/", views_crm.document_add, name="document_add"),
+    path("documents/<int:pk>/", views_crm.document_download, name="document_download"),
+    path("documents/<int:pk>/delete/", views_crm.document_delete, name="document_delete"),
+    path("orders/", views_crm.orders, name="orders"),
+    path("orders/add/", views_crm.order_edit, name="order_create"),
+    path("orders/<int:pk>/", views_crm.order_detail, name="order_detail"),
+    path("orders/<int:pk>/edit/", views_crm.order_edit, name="order_edit"),
+    path("orders/<int:pk>/status/", views_crm.order_status, name="order_status"),
+    path("orders/<int:pk>/comment/", views_crm.order_comment, name="order_comment"),
+    path("orders/<int:order_pk>/items/add/", views_crm.item_edit, name="item_create"),
+    path("items/<int:pk>/", views_crm.item_edit, name="item_edit"),
+    path("items/<int:pk>/delete/", views_crm.item_delete, name="item_delete"),
+    path("items/<int:pk>/printed/", views_crm.item_printed, name="item_printed"),
+    path("orders/<int:pk>/payments/add/", views_crm.payment_add, name="payment_add"),
+    path("payments/<int:pk>/delete/", views_crm.payment_delete, name="payment_delete"),
+    path("orders/<int:pk>/costs/add/", views_crm.cost_add, name="cost_add"),
+    path("costs/<int:pk>/delete/", views_crm.cost_delete, name="cost_delete"),
+    path("orders/<int:pk>/checklist/add/", views_crm.checklist_add, name="checklist_add"),
+    path("checklist/<int:pk>/toggle/", views_crm.checklist_toggle, name="checklist_toggle"),
+    path("checklist/<int:pk>/delete/", views_crm.checklist_delete, name="checklist_delete"),
+    path("orders/<int:pk>/files/add/", views_crm.file_add, name="file_add"),
+    path("files/<int:pk>/", views_crm.file_download, name="file_download"),
+    path("files/<int:pk>/delete/", views_crm.file_delete, name="file_delete"),
     path("backups/", views.backups, name="backups"),
     path("backups/<str:name>", views.backup_download, name="backup_download"),
 ]

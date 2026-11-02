@@ -19,7 +19,7 @@ Studio3D делается по этапам: каждый заканчивает
 
 | Block / Блок | Summary | Status |
 | --- | --- | --- |
-| [CRM](#crm) | Customers, contacts, orders, kanban board, files, documents, search | ⚪ planned |
+| [CRM](#crm) | Customers, contacts, orders, kanban board, files, documents, search | 🟡 in progress |
 | [Money / Деньги](#деньги) | Price calculator and quotes, payments and debts, document templates | ⚪ planned |
 | [Stock / Склад](#склад) | Filament spools with automatic consumption, parts, finished goods, purchasing, QR labels | 🟢 in progress — groups and items framework (branch `dev`) |
 | [Product catalog / Изделия](#изделия) | Products with a proven print "recipe", one-click repeat orders | ⚪ planned |

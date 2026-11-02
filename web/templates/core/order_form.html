@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{% if order %}Заказ {{ order.number }}{% else %}Новый заказ{% endif %}{% endblock %}
+{% block heading %}{% if order %}Заказ {{ order.number }}{% else %}Новый заказ{% endif %}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:860px">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <h2>Основное</h2>
+  <div class="form">
+    {% include "_field.html" with field=form.client %}
+    {% include "_field.html" with field=form.contact %}
+    {% include "_field.html" with field=form.title wide=True %}
+    {% include "_field.html" with field=form.description wide=True %}
+    {% include "_field.html" with field=form.deadline %}
+    {% include "_field.html" with field=form.responsible %}
+  </div>
+  <h2 style="margin-top:20px">Цена</h2>
+  <p class="hint">Себестоимость (пластик, электричество, простой, амортизация, постобработка, транспорт) вносится на вкладке «Деньги» карточки заказа. Налог входит в себестоимость.</p>
+  <div class="form">
+    {% include "_field.html" with field=form.price %}
+    {% include "_field.html" with field=form.tax_percent %}
+  </div>
+  {% if not order %}<p class="hint">Изделия, файлы и этапы работ добавляются на карточке заказа после сохранения.</p>{% endif %}
+  <div class="form-actions">
+    <button class="btn pri" type="submit">Сохранить</button>
+    <a class="btn" href="{% if order %}{% url 'order_detail' order.pk %}{% else %}{% url 'orders' %}{% endif %}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

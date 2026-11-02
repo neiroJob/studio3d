@@ -1,4 +1,5 @@
 import zoneinfo
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.cache import cache
@@ -106,6 +107,432 @@ class StockItem(models.Model):
         return self.min_quantity is not None and self.quantity < self.min_quantity
 
 
+# --- CRM: клиенты и заказы (ROADMAP.md, «CRM») -------------------------------------------------
+
+
+class Client(models.Model):
+    """Карточка клиента. Набор реквизитов зависит от типа (юрлицо, ИП, самозанятый, физлицо)."""
+
+    class Kind(models.TextChoices):
+        COMPANY = "ul", "Юрлицо"
+        SOLE = "ip", "ИП"
+        SELF_EMPLOYED = "sz", "Самозанятый"
+        PERSON = "fl", "Физлицо"
+
+    kind = models.CharField("Тип", max_length=2, choices=Kind.choices, default=Kind.COMPANY)
+    name = models.CharField("Название или ФИО", max_length=255)
+    inn = models.CharField("ИНН", max_length=12, blank=True)
+    kpp = models.CharField("КПП", max_length=9, blank=True)
+    ogrn = models.CharField("ОГРН / ОГРНИП", max_length=15, blank=True)
+    address = models.CharField("Юридический адрес", max_length=255, blank=True)
+    bank = models.CharField("Банк", max_length=200, blank=True)
+    bik = models.CharField("БИК", max_length=9, blank=True)
+    account = models.CharField("Расчётный счёт", max_length=34, blank=True)
+    signer = models.CharField("Подписант", max_length=200, blank=True)
+    tax_regime = models.CharField("Налоговый режим", max_length=100, blank=True)
+    pd_consent = models.BooleanField("Согласие на обработку персональных данных", default=False)
+    tags = models.CharField("Теги", max_length=255, blank=True, help_text="Через запятую")
+    next_contact = models.DateField("Следующий контакт", null=True, blank=True)
+    is_archived = models.BooleanField("В архиве", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "клиент"
+        verbose_name_plural = "клиенты"
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def tag_list(self):
+        return [t.strip() for t in self.tags.split(",") if t.strip()]
+
+    @property
+    def main_contact(self):
+        contacts = list(self.contacts.all())
+        return next((c for c in contacts if c.is_main), contacts[0] if contacts else None)
+
+    @property
+    def requisites(self):
+        """Заполненные реквизиты в порядке показа: (подпись, значение)."""
+        rows = [
+            ("ИНН", self.inn),
+            ("КПП", self.kpp),
+            ("ОГРНИП" if self.kind == self.Kind.SOLE else "ОГРН", self.ogrn),
+            ("Адрес", self.address),
+            ("Банк", self.bank),
+            ("БИК", self.bik),
+            ("Расчётный счёт", self.account),
+            ("Подписант", self.signer),
+            ("Налоговый режим", self.tax_regime),
+        ]
+        return [(label, value) for label, value in rows if value]
+
+
+class ContactPerson(models.Model):
+    """Контактное лицо клиента. Контактов может быть несколько."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="contacts")
+    name = models.CharField("Имя", max_length=200)
+    position = models.CharField("Должность или роль", max_length=100, blank=True)
+    phone = models.CharField("Телефон", max_length=50, blank=True)
+    telegram = models.CharField("Telegram", max_length=100, blank=True)
+    max_messenger = models.CharField("Max", max_length=100, blank=True)
+    email = models.EmailField("E-mail", blank=True)
+    channel = models.CharField("Где общаемся", max_length=200, blank=True)
+    is_main = models.BooleanField("Основной контакт", default=False)
+
+    class Meta:
+        ordering = ["-is_main", "name"]
+        verbose_name = "контактное лицо"
+        verbose_name_plural = "контактные лица"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_main:  # основной контакт один
+            self.client.contacts.exclude(pk=self.pk).update(is_main=False)
+
+    @property
+    def channels(self):
+        rows = [
+            ("Телефон", self.phone),
+            ("Telegram", self.telegram),
+            ("Max", self.max_messenger),
+            ("E-mail", self.email),
+        ]
+        return [(label, value) for label, value in rows if value]
+
+
+class ClientNote(models.Model):
+    """Заметка менеджера в карточке клиента."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="notes")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    text = models.TextField("Заметка")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "заметка о клиенте"
+        verbose_name_plural = "заметки о клиенте"
+
+    def __str__(self):
+        return self.text[:60]
+
+
+class ClientDocument(models.Model):
+    """Документ клиента: договор, счёт, акт, чек, согласие."""
+
+    class Kind(models.TextChoices):
+        CONTRACT = "contract", "Договор"
+        INVOICE = "invoice", "Счёт"
+        ACT = "act", "Акт или УПД"
+        RECEIPT = "receipt", "Чек"
+        CONSENT = "consent", "Согласие ПДн"
+        OTHER = "other", "Другое"
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="documents")
+    kind = models.CharField("Вид", max_length=10, choices=Kind.choices, default=Kind.OTHER)
+    title = models.CharField("Название", max_length=200, blank=True)
+    file = models.FileField("Файл", upload_to="clients/%Y/%m/")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "документ клиента"
+        verbose_name_plural = "документы клиента"
+
+    def __str__(self):
+        return self.display_name
+
+    @property
+    def display_name(self):
+        return self.title or self.file.name.rsplit("/", 1)[-1]
+
+
+class OrderStatus(models.Model):
+    """Статус заказа. Список настраивается; по умолчанию создаётся в миграции (ROADMAP.md, «CRM»)."""
+
+    COLORS = [
+        ("--st-idle", "Синий"),
+        ("--st-pause", "Жёлтый"),
+        ("--st-print", "Зелёный"),
+        ("--st-done", "Фиолетовый"),
+        ("--st-err", "Красный"),
+        ("--st-off", "Серый"),
+    ]
+
+    name = models.CharField("Название", max_length=60, unique=True)
+    order = models.PositiveIntegerField("Порядок", default=0)
+    color = models.CharField("Цвет", max_length=20, choices=COLORS, default="--st-idle")
+    is_final = models.BooleanField("Конечный (заказ закрыт)", default=False)
+    is_side = models.BooleanField("Побочный (пауза, отмена): не входит в основную цепочку", default=False)
+
+    class Meta:
+        ordering = ["is_side", "order", "name"]
+        verbose_name = "статус заказа"
+        verbose_name_plural = "статусы заказа"
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def first(cls):
+        return cls.objects.filter(is_side=False).order_by("order").first()
+
+
+class Order(models.Model):
+    """Заказ клиента. Принтер в заказе не выбирается: его выбирают при запуске печати."""
+
+    number = models.CharField("Номер", max_length=20, unique=True, null=True, blank=True, editable=False)
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="orders", verbose_name="Клиент")
+    contact = models.ForeignKey(
+        ContactPerson,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        verbose_name="Контактное лицо",
+    )
+    title = models.CharField("Название", max_length=255)
+    description = models.TextField("Описание", blank=True)
+    status = models.ForeignKey(
+        OrderStatus, on_delete=models.PROTECT, related_name="orders", verbose_name="Статус"
+    )
+    deadline = models.DateField("Срок", null=True, blank=True)
+    responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="responsible_orders",
+        verbose_name="Ответственный",
+    )
+    price = models.DecimalField(
+        "Цена для клиента, ₽", max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+    tax_percent = models.DecimalField(
+        "Налог, % от цены",
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Например, 6 для УСН «доходы». Входит в себестоимость.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "заказ"
+        verbose_name_plural = "заказы"
+
+    def __str__(self):
+        return f"{self.number} {self.title}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.number:
+            self.number = f"З-{self.pk:04d}"
+            super().save(update_fields=["number"])
+
+    @property
+    def paid(self):
+        return sum((p.amount for p in self.payments.all()), 0)
+
+    @property
+    def rest(self):
+        return self.price - self.paid
+
+    @property
+    def tax_amount(self):
+        return (self.price * self.tax_percent / 100).quantize(Decimal("0.01"))
+
+    @property
+    def cost_total(self):
+        return sum((c.amount for c in self.cost_lines.all()), 0) + self.tax_amount
+
+    @property
+    def margin(self):
+        return self.price - self.cost_total
+
+    @property
+    def margin_percent(self):
+        return round(self.margin / self.price * 100) if self.price else None
+
+    @property
+    def is_overdue(self):
+        return bool(self.deadline and not self.status.is_final and self.deadline < timezone.localdate())
+
+    @property
+    def checklist_progress(self):
+        items = list(self.checklist.all())
+        return sum(1 for i in items if i.done), len(items)
+
+
+class OrderItem(models.Model):
+    """Изделие в заказе. Катушка и принтер выбираются при запуске печати."""
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    name = models.CharField("Название", max_length=255)
+    quantity = models.PositiveIntegerField("Количество", default=1, validators=[MinValueValidator(1)])
+    printed = models.PositiveIntegerField("Напечатано", default=0)
+    material = models.CharField("Пластик", max_length=50, blank=True)
+    color = models.CharField("Цвет", max_length=50, blank=True)
+    unit_price = models.DecimalField(
+        "Цена за штуку, ₽", max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "изделие в заказе"
+        verbose_name_plural = "изделия в заказе"
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def total(self):
+        return self.unit_price * self.quantity
+
+    @property
+    def progress_percent(self):
+        return min(100, round(self.printed / self.quantity * 100)) if self.quantity else 0
+
+
+class OrderPayment(models.Model):
+    """Платёж по заказу. Остаток к оплате считается: цена минус сумма платежей."""
+
+    class Method(models.TextChoices):
+        INVOICE = "invoice", "Безнал, по счёту"
+        CARD = "card", "Перевод на карту"
+        CASH = "cash", "Наличные"
+        SELF_EMPLOYED = "npd", "Чек самозанятого"
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="payments")
+    date = models.DateField("Дата", default=timezone.localdate)
+    amount = models.DecimalField(
+        "Сумма, ₽", max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    method = models.CharField("Способ", max_length=10, choices=Method.choices, default=Method.INVOICE)
+    document = models.CharField("Документ", max_length=200, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["-date", "-pk"]
+        verbose_name = "платёж"
+        verbose_name_plural = "платежи"
+
+    def __str__(self):
+        return f"{self.amount} ₽ · {self.date:%d.%m.%Y}"
+
+
+class OrderCostLine(models.Model):
+    """Статья себестоимости заказа. Налог считается отдельно по `Order.tax_percent`."""
+
+    class Kind(models.TextChoices):
+        PLASTIC = "plastic", "Пластик (стоимость изделия)"
+        ELECTRICITY = "electricity", "Электричество"
+        IDLE = "idle", "Простой принтера включённым"
+        PLASTIC_DELIVERY = "plastic_delivery", "Доставка пластика"
+        DEPRECIATION = "depreciation", "Амортизация оборудования"
+        POSTPROCESS = "postprocess", "Постобработка"
+        TRANSPORT = "transport", "Транспортировка заказа"
+        CONSUMABLE = "consumable", "Расходник со склада"
+        DEFECT = "defect", "Брак"
+        OTHER = "other", "Другое"
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="cost_lines")
+    kind = models.CharField("Статья", max_length=20, choices=Kind.choices, default=Kind.OTHER)
+    amount = models.DecimalField(
+        "Сумма, ₽", max_digits=12, decimal_places=2, validators=[MinValueValidator(0)]
+    )
+    note = models.CharField("Комментарий", max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "статья себестоимости"
+        verbose_name_plural = "статьи себестоимости"
+
+    def __str__(self):
+        return f"{self.get_kind_display()}: {self.amount} ₽"
+
+
+class OrderChecklistItem(models.Model):
+    """Этап работ по заказу: нарезать, напечатать, постобработать, упаковать."""
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="checklist")
+    title = models.CharField("Этап", max_length=200)
+    done = models.BooleanField("Готово", default=False)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "этап работ"
+        verbose_name_plural = "этапы работ"
+
+    def __str__(self):
+        return self.title
+
+
+class OrderFile(models.Model):
+    """Файл заказа (модель, чертёж, фото). Новая загрузка с тем же названием получает следующую версию."""
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="files")
+    title = models.CharField("Название", max_length=200)
+    version = models.PositiveIntegerField("Версия", default=1)
+    file = models.FileField("Файл", upload_to="orders/%Y/%m/")
+    comment = models.CharField("Комментарий", max_length=255, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title", "-version"]
+        verbose_name = "файл заказа"
+        verbose_name_plural = "файлы заказа"
+
+    def __str__(self):
+        return f"{self.title} v{self.version}"
+
+
+class OrderEvent(models.Model):
+    """Журнал заказа: смена статуса, комментарии, платежи."""
+
+    class Kind(models.TextChoices):
+        STATUS = "status", "Статус"
+        COMMENT = "comment", "Комментарий"
+        MONEY = "money", "Деньги"
+        SYSTEM = "system", "Изменение"
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="events")
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.SYSTEM)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "событие заказа"
+        verbose_name_plural = "события заказа"
+
+    def __str__(self):
+        return self.text[:60]
+
+
 class AuditLog(models.Model):
     """Журнал действий: кто, когда, что (ТЗ, раздел 3)."""
 
@@ -143,6 +570,18 @@ class AuditLog(models.Model):
         STOCK_ITEM_CREATE = "stock_item_create", "Позиция склада создана"
         STOCK_ITEM_UPDATE = "stock_item_update", "Позиция склада изменена"
         STOCK_ITEM_ARCHIVE = "stock_item_archive", "Позиция склада архивирована/восстановлена"
+        CLIENT_CREATE = "client_create", "Клиент создан"
+        CLIENT_UPDATE = "client_update", "Клиент изменён"
+        CLIENT_ARCHIVE = "client_archive", "Клиент архивирован/восстановлен"
+        CLIENT_CONTACT = "client_contact", "Контактное лицо клиента изменено"
+        CLIENT_DOCUMENT = "client_document", "Документ клиента загружен/удалён"
+        ORDER_CREATE = "order_create", "Заказ создан"
+        ORDER_UPDATE = "order_update", "Заказ изменён"
+        ORDER_STATUS = "order_status", "Статус заказа изменён"
+        ORDER_ITEM = "order_item", "Изделие заказа изменено"
+        ORDER_PAYMENT = "order_payment", "Платёж по заказу"
+        ORDER_COST = "order_cost", "Статья себестоимости заказа"
+        ORDER_FILE = "order_file", "Файл заказа загружен/удалён"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

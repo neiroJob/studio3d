@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ order.number }} {{ order.title }}{% endblock %}
+{% block heading %}{{ order.number }} · {{ order.title }}{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="panel">
+    <div class="crm-head">
+      <div style="flex:1;min-width:240px">
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill c" style="--c:var({{ order.status.color }})">{{ order.status.name }}</span>
+          {% if order.is_overdue %}<span class="pill overdue">просрочен</span>{% endif %}
+          <span class="spacer"></span>
+          {% if full %}<a class="btn" href="{% url 'order_edit' order.pk %}">Изменить</a>{% endif %}
+        </div>
+        <div class="steps">
+          {% for s in stepper %}
+          <form method="post" action="{% url 'order_status' order.pk %}">{% csrf_token %}
+            <input type="hidden" name="status" value="{{ s.status.pk }}">
+            <button class="step {{ s.state }}" type="submit"{% if s.state == 'cur' %} disabled{% endif %}>{{ s.status.name }}</button>
+          </form>
+          {% endfor %}
+          {% for s in side_statuses %}
+          <form method="post" action="{% url 'order_status' order.pk %}">{% csrf_token %}
+            <input type="hidden" name="status" value="{{ s.pk }}">
+            <button class="step{% if s.pk == order.status_id %} cur{% endif %}" type="submit"{% if s.pk == order.status_id %} disabled{% endif %}>{{ s.name }}</button>
+          </form>
+          {% endfor %}
+        </div>
+        {% if order.description %}<p style="margin:12px 0 0">{{ order.description|linebreaksbr }}</p>{% endif %}
+      </div>
+      <dl class="kv" style="min-width:240px">
+        {% if full %}
+        <dt>Клиент</dt><dd><a href="{% url 'client_detail' order.client_id %}">{{ order.client.name }}</a></dd>
+        {% if order.contact %}<dt>Контакт</dt><dd>{{ order.contact.name }}{% if order.contact.phone %}, {{ order.contact.phone }}{% endif %}</dd>{% endif %}
+        {% endif %}
+        <dt>Срок</dt><dd{% if order.is_overdue %} class="overdue"{% endif %}>{{ order.deadline|date:"d.m.Y"|default:"—" }}</dd>
+        <dt>Ответственный</dt><dd>{% if order.responsible %}{{ order.responsible.first_name|default:order.responsible.username }}{% else %}—{% endif %}</dd>
+        <dt>Принят</dt><dd>{{ order.created_at|date:"d.m.Y" }}</dd>
+      </dl>
+    </div>
+    {% if full %}
+    <div class="strip">
+      <div style="flex:1;min-width:120px;border-right:1px solid var(--line);padding:12px 16px"><b>{{ order.price }} ₽</b><span>Цена</span></div>
+      <div style="flex:1;min-width:120px;border-right:1px solid var(--line);padding:12px 16px"><b>{{ order.paid }} ₽</b><span>Оплачено</span></div>
+      <div style="flex:1;min-width:120px;padding:12px 16px"><b{% if order.rest > 0 %} class="overdue"{% endif %}>{{ order.rest }} ₽</b><span>К оплате</span></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="g21">
+    <div class="panel">
+      <div class="tabs">
+        <a class="{% if tab == 'items' %}on{% endif %}" href="?tab=items">Изделия ({{ order.items.all|length }})</a>
+        <a class="{% if tab == 'files' %}on{% endif %}" href="?tab=files">Файлы ({{ order.files.all|length }})</a>
+        <a class="{% if tab == 'log' %}on{% endif %}" href="?tab=log">Журнал</a>
+        {% if full %}<a class="{% if tab == 'money' %}on{% endif %}" href="?tab=money">Деньги</a>{% endif %}
+      </div>
+
+      {% if tab == 'items' %}
+      {% if full %}<div class="row" style="margin-bottom:12px"><span class="spacer"></span><a class="btn pri" href="{% url 'item_create' order.pk %}">Добавить изделие</a></div>{% endif %}
+      <div class="tbl-wrap"><table>
+        <tr><th>Изделие</th><th>Пластик</th><th class="num">Кол-во</th><th>Напечатано</th>{% if full %}<th class="num">Цена за шт.</th><th class="num">Сумма</th><th></th>{% endif %}</tr>
+        {% for i in order.items.all %}
+        <tr>
+          <td><b>{{ i.name }}</b></td>
+          <td>{{ i.material }}{% if i.color %} · {{ i.color }}{% endif %}</td>
+          <td class="num">{{ i.quantity }}</td>
+          <td>
+            <div class="bar" style="margin-bottom:4px"><i style="width:{{ i.progress_percent }}%"></i></div>
+            <form class="inline-edit" method="post" action="{% url 'item_printed' i.pk %}">{% csrf_token %}
+              <input type="number" name="printed" min="0" max="{{ i.quantity }}" value="{{ i.printed }}" aria-label="Напечатано"> из {{ i.quantity }}
+              <button class="btn sm" type="submit">OK</button>
+            </form>
+          </td>
+          {% if full %}
+          <td class="num">{{ i.unit_price }}</td>
+          <td class="num">{{ i.total }}</td>
+          <td class="num">
+            <a class="btn sm" href="{% url 'item_edit' i.pk %}">Изменить</a>
+            <form class="inline" method="post" action="{% url 'item_delete' i.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form>
+          </td>
+          {% endif %}
+        </tr>
+        {% empty %}<tr><td colspan="{% if full %}7{% else %}4{% endif %}" class="muted">Изделий пока нет.</td></tr>{% endfor %}
+        {% if full and order.items.all %}<tr class="sum-row"><td colspan="5">Итого по изделиям</td><td class="num">{{ items_total }}</td><td></td></tr>{% endif %}
+      </table></div>
+
+      {% elif tab == 'files' %}
+      <div class="row" style="margin-bottom:12px"><span class="spacer"></span><a class="btn pri" href="{% url 'file_add' order.pk %}">Загрузить файл</a></div>
+      <div class="tbl-wrap"><table>
+        <tr><th>Файл</th><th>Версия</th><th>Загружен</th><th>Комментарий</th>{% if full %}<th></th>{% endif %}</tr>
+        {% for group in file_groups %}{% for f in group %}
+        <tr{% if not forloop.first %} class="off"{% endif %}>
+          <td>{% if forloop.first %}<b>{% endif %}<a href="{% url 'file_download' f.pk %}">{{ f.title }}</a>{% if forloop.first %}</b>{% endif %}</td>
+          <td>v{{ f.version }}{% if forloop.first %} <span class="pill acc">актуальная</span>{% endif %}</td>
+          <td>{{ f.created_at|date:"d.m.Y H:i" }}</td>
+          <td>{{ f.comment }}</td>
+          {% if full %}<td class="num"><form class="inline" method="post" action="{% url 'file_delete' f.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form></td>{% endif %}
+        </tr>
+        {% endfor %}{% empty %}<tr><td colspan="{% if full %}5{% else %}4{% endif %}" class="muted">Файлов нет. Повторная загрузка с тем же названием сохраняется как новая версия.</td></tr>{% endfor %}
+      </table></div>
+
+      {% elif tab == 'log' %}
+      <form method="post" action="{% url 'order_comment' order.pk %}" class="stack" style="margin-bottom:16px">
+        {% csrf_token %}
+        <div class="form">{% include "_field.html" with field=comment_form.text wide=True %}</div>
+        <div><button class="btn pri" type="submit">Добавить комментарий</button></div>
+      </form>
+      <ul class="log">
+        {% for e in events %}
+        <li class="{{ e.kind }}">
+          <time>{{ e.created_at|date:"d.m.Y H:i" }} · {% if e.user %}{{ e.user.first_name|default:e.user.username }}{% else %}система{% endif %}</time>
+          {{ e.text|linebreaksbr }}
+        </li>
+        {% empty %}<li class="muted">Записей нет.</li>{% endfor %}
+      </ul>
+
+      {% else %}
+      <div class="row" style="margin-bottom:8px"><h2 style="margin:0">Платежи</h2><span class="spacer"></span><a class="btn sm" href="{% url 'payment_add' order.pk %}">Добавить платёж</a></div>
+      <div class="tbl-wrap"><table>
+        <tr><th>Дата</th><th>Способ</th><th>Документ</th><th class="num">Сумма</th><th></th></tr>
+        {% for p in order.payments.all %}
+        <tr>
+          <td>{{ p.date|date:"d.m.Y" }}</td><td>{{ p.get_method_display }}</td><td>{{ p.document|default:"—" }}</td><td class="num">{{ p.amount }}</td>
+          <td class="num"><form class="inline" method="post" action="{% url 'payment_delete' p.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form></td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="muted">Платежей нет.</td></tr>{% endfor %}
+        <tr class="sum-row"><td colspan="3">Оплачено из {{ order.price }} ₽</td><td class="num">{{ order.paid }}</td><td></td></tr>
+      </table></div>
+
+      <div class="row" style="margin:20px 0 8px"><h2 style="margin:0">Себестоимость</h2><span class="spacer"></span><a class="btn sm" href="{% url 'cost_add' order.pk %}">Добавить статью</a></div>
+      <div class="tbl-wrap"><table>
+        <tr><th>Статья</th><th>Комментарий</th><th class="num">Сумма</th><th></th></tr>
+        {% for c in order.cost_lines.all %}
+        <tr>
+          <td>{{ c.get_kind_display }}</td><td>{{ c.note|default:"—" }}</td><td class="num">{{ c.amount }}</td>
+          <td class="num"><form class="inline" method="post" action="{% url 'cost_delete' c.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form></td>
+        </tr>
+        {% empty %}<tr><td colspan="4" class="muted">Статей пока нет.</td></tr>{% endfor %}
+        <tr><td>Налог ({{ order.tax_percent }}%)</td><td></td><td class="num">{{ order.tax_amount }}</td><td></td></tr>
+        <tr class="sum-row"><td colspan="2">Себестоимость</td><td class="num">{{ order.cost_total }}</td><td></td></tr>
+        <tr class="sum-row"><td colspan="2">Маржа{% if order.margin_percent is not None %} ({{ order.margin_percent }}%){% endif %}</td><td class="num{% if order.margin < 0 %} overdue{% endif %}">{{ order.margin }}</td><td></td></tr>
+      </table></div>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2>Этапы работ{% if check_total %} <span class="muted" style="font-weight:400">· {{ check_done }} из {{ check_total }}</span>{% endif %}</h2>
+      <ul class="log">
+        {% for c in order.checklist.all %}
+        <li>
+          <form class="inline" method="post" action="{% url 'checklist_toggle' c.pk %}">{% csrf_token %}
+            <button class="btn sm" type="submit" aria-pressed="{{ c.done|yesno:'true,false' }}">{% if c.done %}☑{% else %}☐{% endif %}</button>
+          </form>
+          {% if c.done %}<s class="muted">{{ c.title }}</s>{% else %}{{ c.title }}{% endif %}
+          <form class="inline" method="post" action="{% url 'checklist_delete' c.pk %}">{% csrf_token %}<button class="btn sm" type="submit" aria-label="Убрать этап">×</button></form>
+        </li>
+        {% empty %}<li class="muted">Этапов нет.</li>{% endfor %}
+      </ul>
+      <form method="post" action="{% url 'checklist_add' order.pk %}" class="inline-edit" style="margin-top:12px">
+        {% csrf_token %}
+        <input type="text" name="title" placeholder="Новый этап" style="width:160px" aria-label="Новый этап" required>
+        <button class="btn sm" type="submit">Добавить</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -13,6 +13,14 @@
       <a href="{% url 'dashboard' %}" class="{% if url == 'dashboard' or url == 'printer_detail' %}on{% endif %}">Дашборд</a>
       {% if "printers_manage" in rights %}<a href="{% url 'printer_add' %}" class="{% if url == 'printer_add' %}on{% endif %}">Добавить принтер</a>{% endif %}
       {% if "stock_income" in rights or "stock_writeoff" in rights %}<a href="{% url 'stock' %}" class="{% if url == 'stock' or url == 'stock_group_create' or url == 'stock_group_edit' or url == 'stock_item_create' or url == 'stock_item_edit' %}on{% endif %}">Склад</a>{% endif %}
+      {% if "orders_full" in rights %}
+        <a href="{% url 'clients' %}" class="{% if url == 'clients' or url == 'client_detail' or url == 'client_edit' or url == 'contact_create' or url == 'contact_edit' or url == 'document_add' %}on{% endif %}">Клиенты</a>
+        <a href="{% url 'client_create' %}" class="{% if url == 'client_create' %}on{% endif %}">Добавить клиента</a>
+      {% endif %}
+      {% if "orders_full" in rights or "orders_anonymized" in rights %}
+        <a href="{% url 'orders' %}" class="{% if url == 'orders' or url == 'order_detail' or url == 'order_edit' or url == 'item_create' or url == 'item_edit' or url == 'payment_add' or url == 'cost_add' or url == 'file_add' %}on{% endif %}">Заказы</a>
+      {% endif %}
+      {% if "orders_full" in rights %}<a href="{% url 'order_create' %}" class="{% if url == 'order_create' %}on{% endif %}">Добавить заказ</a>{% endif %}
       {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
         <div class="nav-group">Администрирование</div>
       {% endif %}

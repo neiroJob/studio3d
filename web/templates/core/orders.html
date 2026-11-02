@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Заказы{% endblock %}
+{% block heading %}Заказы{% endblock %}
+{% block content %}
+<div class="panel">
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Номер, название{% if full %}, клиент{% endif %}" aria-label="Поиск">
+    <select name="status" aria-label="Статус">
+      <option value="">Все активные</option>
+      {% for s in statuses %}<option value="{{ s.pk }}"{% if status == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
+    </select>
+    <label class="check"><input type="checkbox" name="mine" value="1"{% if mine %} checked{% endif %}> Мои</label>
+    <label class="check"><input type="checkbox" name="closed" value="1"{% if show_closed %} checked{% endif %}> Закрытые</label>
+    <button class="btn" type="submit">Найти</button>
+    <span class="spacer"></span>
+    {% if full %}<a class="btn pri" href="{% url 'order_create' %}">Добавить заказ</a>{% endif %}
+  </form>
+  <div class="tbl-wrap"><table>
+    <tr>
+      <th>Номер</th><th>Что</th>{% if full %}<th>Клиент</th>{% endif %}<th>Статус</th><th>Срок</th><th>Ответственный</th>
+      {% if full %}<th class="num">Цена</th><th class="num">Долг</th>{% endif %}
+    </tr>
+    {% for o in page %}
+    <tr>
+      <td><a href="{% url 'order_detail' o.pk %}"><b>{{ o.number }}</b></a></td>
+      <td>{{ o.title }}</td>
+      {% if full %}<td><a href="{% url 'client_detail' o.client_id %}">{{ o.client.name }}</a></td>{% endif %}
+      <td><span class="pill c" style="--c:var({{ o.status.color }})">{{ o.status.name }}</span></td>
+      <td{% if o.is_overdue %} class="overdue"{% endif %}>{{ o.deadline|date:"d.m.Y"|default:"—" }}</td>
+      <td>{% if o.responsible %}{{ o.responsible.first_name|default:o.responsible.username }}{% else %}—{% endif %}</td>
+      {% if full %}<td class="num">{{ o.price }}</td><td class="num{% if o.rest > 0 %} overdue{% endif %}">{{ o.rest }}</td>{% endif %}
+    </tr>
+    {% empty %}<tr><td colspan="{% if full %}8{% else %}5{% endif %}" class="muted">Заказов не найдено.{% if full %} Добавьте первый кнопкой «Добавить заказ».{% endif %}</td></tr>{% endfor %}
+  </table></div>
+  {% if page.has_other_pages %}
+  <div class="pager">
+    {% if page.has_previous %}<a class="btn sm" href="?page={{ page.previous_page_number }}&q={{ q|urlencode }}&status={{ status }}{% if mine %}&mine=1{% endif %}{% if show_closed %}&closed=1{% endif %}">Назад</a>{% endif %}
+    <span class="muted">Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a class="btn sm" href="?page={{ page.next_page_number }}&q={{ q|urlencode }}&status={{ status }}{% if mine %}&mine=1{% endif %}{% if show_closed %}&closed=1{% endif %}">Вперёд</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

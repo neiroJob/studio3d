@@ -213,3 +213,28 @@ tr.off td{color:var(--ink3)}
   .grid2{grid-template-columns:1fr}
   .who .name{display:none}
 }
+
+/* CRM: степпер статусов, контакты, журнал заказа */
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps form{display:inline}
+.steps button,.steps .step{font-size:13px;padding:4px 11px;border-radius:14px;background:var(--panel2);color:var(--ink3);border:1px solid transparent;cursor:pointer}
+.steps .step.done{color:var(--ink2)}
+.steps .step.cur{background:var(--accent-soft);color:var(--ink);font-weight:600;border-color:var(--accent)}
+.steps .step:disabled{cursor:default}
+.person{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel2)}
+.person+.person{margin-top:8px}
+.person b{display:block}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.log li{border-left:3px solid var(--line);padding:2px 0 2px 10px;font-size:14px}
+.log li.comment{border-left-color:var(--accent)}
+.log li.status{border-left-color:var(--st-done)}
+.log li.money{border-left-color:var(--ok)}
+.log time{display:block;font-size:12px;color:var(--ink3)}
+.overdue{color:var(--err);font-weight:600}
+.crm-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px}
+.crm-head h2{margin:0}
+.sum-row td{font-weight:600}
+.inline-edit{display:inline-flex;gap:4px;align-items:center}
+.inline-edit input{width:64px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters input,.filters select{padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-size:14px}

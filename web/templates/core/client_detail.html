@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }}{% endblock %}
+{% block heading %}{{ client.name }}{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="strip">
+    <div style="flex:1;min-width:120px;border-right:1px solid var(--line);padding:12px 16px"><b>{{ orders|length }}</b><span>Заказов</span></div>
+    <div style="flex:1;min-width:120px;border-right:1px solid var(--line);padding:12px 16px"><b>{{ orders_total }} ₽</b><span>Сумма заказов</span></div>
+    <div style="flex:1;min-width:120px;border-right:1px solid var(--line);padding:12px 16px"><b{% if debt > 0 %} class="overdue"{% endif %}>{{ debt }} ₽</b><span>Долг</span></div>
+    <div style="flex:1;min-width:120px;padding:12px 16px"><b>{{ client.next_contact|date:"d.m.Y"|default:"—" }}</b><span>Следующий контакт</span></div>
+  </div>
+
+  <div class="g21">
+    <div class="panel">
+      <div class="row" style="margin-bottom:12px">
+        <span class="pill acc">{{ client.get_kind_display }}</span>
+        {% if client.is_archived %}<span class="pill">архив</span>{% endif %}
+        {% for t in client.tag_list %}<span class="pill">{{ t }}</span>{% endfor %}
+        <span class="spacer"></span>
+        <a class="btn pri" href="{% url 'order_create' %}?client={{ client.pk }}">Добавить заказ</a>
+        <a class="btn" href="{% url 'client_edit' client.pk %}">Изменить</a>
+        <form class="inline" method="post" action="{% url 'client_archive' client.pk %}">{% csrf_token %}<button class="btn" type="submit">{% if client.is_archived %}Восстановить{% else %}В архив{% endif %}</button></form>
+      </div>
+      <h2>Реквизиты</h2>
+      {% if client.requisites %}
+      <dl class="kv">{% for label, value in client.requisites %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+      {% else %}<p class="muted">Реквизиты не заполнены.</p>{% endif %}
+      <p class="hint" style="margin-top:10px">Согласие на обработку персональных данных: {% if client.pd_consent %}получено{% else %}не получено{% endif %}.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Контактные лица</h2><span class="spacer"></span>
+        <a class="btn sm" href="{% url 'contact_create' client.pk %}">Добавить</a></div>
+      {% for p in client.contacts.all %}
+      <div class="person">
+        <b>{{ p.name }}{% if p.position %} <span class="muted" style="font-weight:400">· {{ p.position }}</span>{% endif %}{% if p.is_main %} <span class="pill acc">основной</span>{% endif %}</b>
+        <div class="small">{% for label, value in p.channels %}{{ label }}: {{ value }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</div>
+        {% if p.channel %}<div class="hint">Где общаемся: {{ p.channel }}</div>{% endif %}
+        <div class="acts">
+          <a class="btn sm" href="{% url 'contact_edit' p.pk %}">Изменить</a>
+          <form class="inline" method="post" action="{% url 'contact_delete' p.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form>
+        </div>
+      </div>
+      {% empty %}<p class="muted">Контактов нет.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs">
+      <a class="{% if tab == 'orders' %}on{% endif %}" href="?tab=orders">Заказы ({{ orders|length }})</a>
+      <a class="{% if tab == 'docs' %}on{% endif %}" href="?tab=docs">Документы ({{ documents|length }})</a>
+      <a class="{% if tab == 'notes' %}on{% endif %}" href="?tab=notes">Заметки ({{ notes|length }})</a>
+    </div>
+
+    {% if tab == 'orders' %}
+    <div class="tbl-wrap"><table>
+      <tr><th>Номер</th><th>Принят</th><th>Что</th><th>Статус</th><th class="num">Цена</th><th class="num">Оплачено</th><th class="num">Долг</th></tr>
+      {% for o in orders %}
+      <tr>
+        <td><a href="{% url 'order_detail' o.pk %}"><b>{{ o.number }}</b></a></td>
+        <td>{{ o.created_at|date:"d.m.Y" }}</td>
+        <td>{{ o.title }}</td>
+        <td><span class="pill c" style="--c:var({{ o.status.color }})">{{ o.status.name }}</span></td>
+        <td class="num">{{ o.price }}</td>
+        <td class="num">{{ o.paid }}</td>
+        <td class="num">{{ o.rest }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="7" class="muted">Заказов пока нет.</td></tr>{% endfor %}
+    </table></div>
+
+    {% elif tab == 'docs' %}
+    <div class="row" style="margin-bottom:12px"><span class="spacer"></span><a class="btn pri" href="{% url 'document_add' client.pk %}">Загрузить документ</a></div>
+    <div class="tbl-wrap"><table>
+      <tr><th>Документ</th><th>Вид</th><th>Загружен</th><th></th></tr>
+      {% for d in documents %}
+      <tr>
+        <td><a href="{% url 'document_download' d.pk %}">{{ d.display_name }}</a></td>
+        <td>{{ d.get_kind_display }}</td>
+        <td>{{ d.created_at|date:"d.m.Y" }}</td>
+        <td class="num"><form class="inline" method="post" action="{% url 'document_delete' d.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form></td>
+      </tr>
+      {% empty %}<tr><td colspan="4" class="muted">Документов нет.</td></tr>{% endfor %}
+    </table></div>
+
+    {% else %}
+    <form method="post" action="{% url 'note_add' client.pk %}" class="stack" style="margin-bottom:16px">
+      {% csrf_token %}
+      <div class="form">{% include "_field.html" with field=note_form.text wide=True %}</div>
+      <div><button class="btn pri" type="submit">Добавить заметку</button></div>
+    </form>
+    <ul class="log">
+      {% for n in notes %}
+      <li class="comment">
+        <time>{{ n.created_at|date:"d.m.Y H:i" }} · {% if n.author %}{{ n.author.first_name|default:n.author.username }}{% else %}—{% endif %}</time>
+        {{ n.text|linebreaksbr }}
+        <form class="inline" method="post" action="{% url 'note_delete' n.pk %}">{% csrf_token %}<button class="btn sm" type="submit">Удалить</button></form>
+      </li>
+      {% empty %}<li class="muted">Заметок нет.</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

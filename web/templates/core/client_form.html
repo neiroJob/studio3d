@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{% if client %}Клиент «{{ client.name }}»{% else %}Новый клиент{% endif %}{% endblock %}
+{% block heading %}{% if client %}Клиент «{{ client.name }}»{% else %}Новый клиент{% endif %}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:860px">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <h2>Основное</h2>
+  <div class="form">
+    {% include "_field.html" with field=form.kind %}
+    {% include "_field.html" with field=form.name %}
+    {% include "_field.html" with field=form.tags %}
+    {% include "_field.html" with field=form.next_contact %}
+  </div>
+  <h2 style="margin-top:20px">Реквизиты</h2>
+  <p class="hint">Для физлица и самозанятого достаточно адреса и ИНН, если они нужны для документов.</p>
+  <div class="form">
+    {% include "_field.html" with field=form.inn %}
+    {% include "_field.html" with field=form.kpp %}
+    {% include "_field.html" with field=form.ogrn %}
+    {% include "_field.html" with field=form.tax_regime %}
+    {% include "_field.html" with field=form.address wide=True %}
+    {% include "_field.html" with field=form.bank %}
+    {% include "_field.html" with field=form.bik %}
+    {% include "_field.html" with field=form.account %}
+    {% include "_field.html" with field=form.signer %}
+  </div>
+  <div class="form" style="margin-top:16px">
+    {% include "_field.html" with field=form.pd_consent wide=True %}
+  </div>
+  {% if not client %}<p class="hint">Контактных лиц можно добавить на карточке клиента после сохранения.</p>{% endif %}
+  <div class="form-actions">
+    <button class="btn pri" type="submit">Сохранить</button>
+    <a class="btn" href="{% if client %}{% url 'client_detail' client.pk %}{% else %}{% url 'clients' %}{% endif %}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

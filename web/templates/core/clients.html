@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Клиенты{% endblock %}
+{% block heading %}Клиенты{% endblock %}
+{% block content %}
+<div class="panel">
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Название, ИНН, контакт, тег" aria-label="Поиск">
+    <select name="kind" aria-label="Тип клиента">
+      <option value="">Все типы</option>
+      {% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <label class="check"><input type="checkbox" name="archived" value="1"{% if archived %} checked{% endif %}> Архив</label>
+    <button class="btn" type="submit">Найти</button>
+    <span class="spacer"></span>
+    <a class="btn pri" href="{% url 'client_create' %}">Добавить клиента</a>
+  </form>
+  <div class="tbl-wrap"><table>
+    <tr><th>Клиент</th><th>Тип</th><th>Основной контакт</th><th>Теги</th><th class="num">Заказов</th><th>Связаться</th></tr>
+    {% for c in page %}
+    <tr class="{% if c.is_archived %}off{% endif %}">
+      <td><a href="{% url 'client_detail' c.pk %}"><b>{{ c.name }}</b></a>{% if c.is_archived %} <span class="pill">архив</span>{% endif %}</td>
+      <td>{{ c.get_kind_display }}</td>
+      <td>{% with m=c.main_contact %}{% if m %}{{ m.name }}{% if m.phone %}, {{ m.phone }}{% endif %}{% else %}—{% endif %}{% endwith %}</td>
+      <td>{% for t in c.tag_list %}<span class="pill acc">{{ t }}</span> {% endfor %}</td>
+      <td class="num">{{ c.orders_count }}</td>
+      <td>{{ c.next_contact|date:"d.m.Y"|default:"—" }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="muted">Клиентов не найдено. Добавьте первого кнопкой «Добавить клиента».</td></tr>{% endfor %}
+  </table></div>
+  {% if page.has_other_pages %}
+  <div class="pager">
+    {% if page.has_previous %}<a class="btn sm" href="?page={{ page.previous_page_number }}&q={{ q|urlencode }}&kind={{ kind }}{% if archived %}&archived=1{% endif %}">Назад</a>{% endif %}
+    <span class="muted">Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a class="btn sm" href="?page={{ page.next_page_number }}&q={{ q|urlencode }}&kind={{ kind }}{% if archived %}&archived=1{% endif %}">Вперёд</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

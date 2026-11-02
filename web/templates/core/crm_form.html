@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}
+<form class="panel" method="post" novalidate style="max-width:560px"{% if multipart %} enctype="multipart/form-data"{% endif %}>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error" style="margin-bottom:12px">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="form">
+    {% for field in form %}{% include "_field.html" with field=field %}{% endfor %}
+  </div>
+  <div class="form-actions"><button class="btn pri" type="submit">{{ submit }}</button><a class="btn" href="{{ back }}">Отмена</a></div>
+</form>
+{% endblock %}
