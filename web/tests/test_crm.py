@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from accounts.roles import ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR
+from core.gcode_meta import parse_gcode_meta
 from core.models import (
     AuditLog,
     Client,
@@ -19,6 +20,9 @@ from core.models import (
     OrderFile,
     OrderItem,
     OrderStatus,
+    StockGroup,
+    StockItem,
+    WorkStage,
 )
 
 PASSWORD = "Pech-2026-studio"
@@ -240,12 +244,15 @@ def test_operator_works_with_status_checklist_and_comments(client):
     target = OrderStatus.objects.exclude(pk=order.status_id).first()
 
     assert client.post(reverse("order_status", args=[order.pk]), {"status": target.pk}).status_code == 302
-    client.post(reverse("checklist_add", args=[order.pk]), {"title": "Подготовить модель"})
-    step = OrderChecklistItem.objects.get()
+    step = OrderChecklistItem.objects.create(order=order, title="В печати")
     client.post(reverse("checklist_toggle", args=[step.pk]))
     step.refresh_from_db()
     assert step.done
     assert order.checklist_progress == (1, 1)
+    # оператор только отмечает этапы; список правит один Админ
+    assert client.get(reverse("stages")).status_code == 403
+    assert client.post(reverse("stages"), {"name": "Свой этап"}).status_code == 403
+    assert not WorkStage.objects.filter(name="Свой этап").exists()
 
     client.post(reverse("order_comment", args=[order.pk]), {"text": "Пластик закончился"})
     assert order.events.filter(kind=OrderEvent.Kind.COMMENT, text="Пластик закончился").exists()
@@ -289,6 +296,242 @@ def test_order_files_get_versions_and_are_downloadable(client, settings):
 
     body = client.get(reverse("order_detail", args=[order.pk]), {"tab": "files"}).content.decode()
     assert "v2" in body and "актуальная" in body
+
+
+def make_plastic(quantity="2", unit="кг", **extra):
+    group, _ = StockGroup.objects.get_or_create(name="Пластик")
+    return StockItem.objects.create(
+        group=group, name="PETG чёрный", unit=unit, quantity=Decimal(quantity), **extra
+    )
+
+
+def make_item(order, plastic=None, **extra):
+    params = {"name": "Корпус", "quantity": 10, "unit_weight_g": Decimal("50"), "unit_time_min": 30}
+    params.update(extra)
+    return OrderItem.objects.create(order=order, plastic=plastic, unit_price=Decimal("100"), **params)
+
+
+@pytest.mark.django_db
+def test_default_work_stages_are_seeded_in_fixed_order():
+    names = list(WorkStage.objects.values_list("name", flat=True))
+    assert len(names) == 7
+    assert names[2:] == ["В печати", "Распечатано", "Постобработка", "Упаковка", "Отправка"]
+
+
+@pytest.mark.django_db
+def test_only_admin_edits_stage_catalog(client):
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    stage = WorkStage.objects.first()
+    assert client.get(reverse("stages")).status_code == 403
+    assert client.post(reverse("stage_delete", args=[stage.pk])).status_code == 403
+    assert client.post(reverse("stage_move", args=[stage.pk]), {"dir": "down"}).status_code == 403
+    assert WorkStage.objects.count() == 7
+
+
+@pytest.mark.django_db
+def test_admin_adds_moves_and_deletes_stages(client):
+    make_user("root", ROLE_ADMIN)
+    login(client, "root")
+    assert client.get(reverse("stages")).status_code == 200
+
+    client.post(reverse("stages"), {"name": "Контроль качества"})
+    added = WorkStage.objects.get(name="Контроль качества")
+    assert added.order == 8
+    assert AuditLog.objects.filter(action=AuditLog.Action.STAGE_CATALOG).exists()
+
+    client.post(reverse("stage_move", args=[added.pk]), {"dir": "up"})
+    names = list(WorkStage.objects.values_list("name", flat=True))
+    assert names[6] == "Контроль качества" and names[-1] == "Отправка"
+    client.post(reverse("stage_move", args=[WorkStage.objects.first().pk]), {"dir": "up"})  # выше нельзя
+    assert [s.order for s in WorkStage.objects.all()] == list(range(1, 9))
+
+    client.post(reverse("stage_delete", args=[added.pk]))
+    assert not WorkStage.objects.filter(name="Контроль качества").exists()
+
+
+@pytest.mark.django_db
+def test_new_order_copies_stages_and_old_orders_keep_theirs(client):
+    make_user("root", ROLE_ADMIN)
+    login(client, "root")
+    owner = make_client()
+    old = make_order(owner)
+    OrderChecklistItem.objects.create(order=old, title="Старый этап")
+
+    WorkStage.objects.create(name="Контроль качества", order=8)
+    client.post(reverse("order_create"), {"client": owner.pk, "title": "Новый", "price": "1", "tax_percent": "0"})
+    new = Order.objects.exclude(pk=old.pk).get()
+    titles = list(new.checklist.values_list("title", flat=True))
+    assert len(titles) == 8 and titles[-1] == "Контроль качества"
+    assert list(old.checklist.values_list("title", flat=True)) == ["Старый этап"]
+
+    # правка заказа этапы не дублирует
+    client.post(
+        reverse("order_edit", args=[new.pk]),
+        {"client": owner.pk, "title": "Новый 2", "price": "2", "tax_percent": "0"},
+    )
+    assert new.checklist.count() == 8
+
+
+@pytest.mark.django_db
+def test_order_detail_has_no_free_stage_editing(client):
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    order = make_order()
+    OrderChecklistItem.objects.create(order=order, title="Упаковка")
+    body = client.get(reverse("order_detail", args=[order.pk])).content.decode()
+    assert "Новый этап" not in body and "Убрать этап" not in body
+
+
+@pytest.mark.django_db
+def test_operator_cannot_create_or_edit_orders(client):
+    make_user("sergey", ROLE_OPERATOR)
+    login(client, "sergey")
+    owner = make_client()
+    order = make_order(owner)
+    resp = client.post(reverse("order_create"), {"client": owner.pk, "title": "Х", "price": "1"})
+    assert resp.status_code == 403
+    assert client.post(reverse("order_edit", args=[order.pk]), {"title": "Х"}).status_code == 403
+    assert Order.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_item_form_takes_weight_and_time_from_gcode(client, settings):
+    media = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+    settings.MEDIA_ROOT = media.name
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    order = make_order()
+    plastic = make_plastic()
+    gcode = b"; total filament weight [g] : 12.5\n; estimated printing time (normal mode) = 1h 5m 30s\nG28\n"
+
+    resp = client.post(
+        reverse("item_create", args=[order.pk]),
+        {
+            "name": "Крышка",
+            "quantity": "4",
+            "plastic": plastic.pk,
+            "new_file": SimpleUploadedFile("lid.gcode", gcode),
+            "unit_price": "100",
+        },
+    )
+    assert resp.status_code == 302
+    item = order.items.get()
+    assert item.unit_weight_g == Decimal("12.50") and item.unit_time_min == 66
+    assert item.print_file.title == "lid.gcode" and item.print_file.version == 1
+    assert item.need_grams == Decimal("50") and item.total_time_min == 264
+
+
+@pytest.mark.django_db
+def test_manual_weight_and_time_win_over_gcode(client, settings):
+    media = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+    settings.MEDIA_ROOT = media.name
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    order = make_order()
+    gcode = b"; total filament weight [g] : 12.5\n; estimated printing time (normal mode) = 1h\n"
+    client.post(
+        reverse("item_create", args=[order.pk]),
+        {
+            "name": "Крышка",
+            "quantity": "1",
+            "new_file": SimpleUploadedFile("lid.gcode", gcode),
+            "unit_weight_g": "20",
+            "unit_time_min": "90",
+            "unit_price": "1",
+        },
+    )
+    item = order.items.get()
+    assert item.unit_weight_g == Decimal("20") and item.unit_time_min == 90
+
+
+@pytest.mark.django_db
+def test_item_without_plastic_and_file_is_allowed(client):
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    order = make_order()
+    resp = client.post(reverse("item_create", args=[order.pk]), {"name": "Модель", "quantity": "1", "unit_price": "5"})
+    assert resp.status_code == 302
+    item = order.items.get()
+    assert item.plastic is None and item.unit_weight_g == 0 and item.unit_time_min == 0
+
+
+@pytest.mark.django_db
+def test_stock_shortage_is_reserved_across_orders_and_warned(client):
+    make_user("anna", ROLE_MANAGER)
+    login(client, "anna")
+    plastic = make_plastic("1")  # 1 кг = 1000 г
+    first = make_item(make_order(), plastic)  # 500 г
+    assert first.shortage_grams == 0
+    second = make_item(make_order(), plastic, quantity=12)  # 600 г при свободных 500
+    assert second.shortage_grams == Decimal("100")
+    assert plastic.reserved_grams() == Decimal("1100")
+
+    resp = client.post(
+        reverse("item_edit", args=[second.pk]),
+        {"name": "Корпус", "quantity": "12", "plastic": plastic.pk, "unit_weight_g": "50", "unit_time_min": "30", "unit_price": "100"},
+        follow=True,
+    )
+    assert "не хватает" in resp.content.decode()
+
+
+@pytest.mark.django_db
+def test_printed_pieces_write_plastic_off_the_stock(client):
+    make_user("sergey", ROLE_OPERATOR)
+    login(client, "sergey")
+    plastic = make_plastic("2", min_quantity=Decimal("1.2"))
+    item = make_item(make_order(), plastic)
+
+    client.post(reverse("item_printed", args=[item.pk]), {"printed": "4"})  # 4 × 50 г = 200 г
+    plastic.refresh_from_db()
+    assert plastic.quantity == Decimal("1.80")
+    assert plastic.reserved_grams() == Decimal("300")  # напечатанное резервом уже не считается
+
+    client.post(reverse("item_printed", args=[item.pk]), {"printed": "4"})  # без изменений — без списания
+    plastic.refresh_from_db()
+    assert plastic.quantity == Decimal("1.80")
+
+    resp = client.post(reverse("item_printed", args=[item.pk]), {"printed": "10"}, follow=True)  # ещё 300 г
+    plastic.refresh_from_db()
+    assert plastic.quantity == Decimal("1.50")
+    assert AuditLog.objects.filter(action=AuditLog.Action.ORDER_STOCK).count() == 2
+
+    client.post(reverse("item_printed", args=[item.pk]), {"printed": "0"})  # исправили вниз — вернули
+    plastic.refresh_from_db()
+    assert plastic.quantity == Decimal("2.00")
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+def test_low_stock_is_warned_after_write_off(client):
+    make_user("sergey", ROLE_OPERATOR)
+    login(client, "sergey")
+    plastic = make_plastic("1", min_quantity=Decimal("0.8"))
+    item = make_item(make_order(), plastic)
+    resp = client.post(reverse("item_printed", args=[item.pk]), {"printed": "10"}, follow=True)  # −500 г
+    assert "мало" in resp.content.decode()
+
+
+@pytest.mark.django_db
+def test_non_weight_stock_unit_is_not_written_off(client):
+    make_user("sergey", ROLE_OPERATOR)
+    login(client, "sergey")
+    plastic = make_plastic("5", unit="катушка")
+    item = make_item(make_order(), plastic)
+    assert plastic.grams_per_unit is None and item.shortage_grams == 0
+    client.post(reverse("item_printed", args=[item.pk]), {"printed": "5"})
+    plastic.refresh_from_db()
+    assert plastic.quantity == Decimal("5")
+
+
+def test_gcode_meta_parsers():
+    prusa = "; filament used [g] = 10.5, 4.5\n; estimated printing time (normal mode) = 1d 2h 3m 4s\n"
+    assert parse_gcode_meta(prusa, "") == (Decimal("15.00"), 26 * 60 + 3 + 0)
+    cura = ";TIME:3600\n;Filament used: 1.2m\n"
+    assert parse_gcode_meta(cura, "") == (None, 60)
+    assert parse_gcode_meta("G28\n", "G1 X0\n") == (None, None)
+    bambu = "; total filament weight [g] : 8.80\n; total estimated time: 2h 5m 10s\n"
+    assert parse_gcode_meta("", bambu) == (Decimal("8.80"), 125)
 
 
 @pytest.mark.django_db

@@ -33,6 +33,7 @@
         <a href="{% url 'settings' %}" class="{% if url == 'settings' %}on{% endif %}">{% if "studio_settings" in rights %}Настройки и тарифы{% else %}Тарифы{% endif %}</a>
       {% endif %}
       {% if "studio_settings" in rights %}
+        <a href="{% url 'stages' %}" class="{% if url == 'stages' %}on{% endif %}">Этапы работ</a>
         <a href="{% url 'backups' %}" class="{% if url == 'backups' %}on{% endif %}">Резервные копии</a>
       {% endif %}
     </nav>

@@ -1,17 +1,21 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Max
 from django.utils import timezone
 
 from accounts.forms import PasswordPairMixin, password_fields
 
+from .gcode_meta import read_gcode_meta
 from .models import (
+    PLASTIC_GROUP,
     Client,
     ClientDocument,
     ClientNote,
     ContactPerson,
     ElectricityTariff,
     Order,
-    OrderChecklistItem,
     OrderCostLine,
     OrderFile,
     OrderItem,
@@ -19,6 +23,7 @@ from .models import (
     StockGroup,
     StockItem,
     StudioSettings,
+    WorkStage,
     timezone_choices,
 )
 
@@ -165,9 +170,83 @@ class OrderForm(forms.ModelForm):
 
 
 class OrderItemForm(forms.ModelForm):
+    """Изделие заказа: пластик со склада, файл печати, время и вес одной штуки.
+
+    Время и вес берутся из G-code файла печати, если поля оставлены пустыми; заполненные вручную
+    остаются как есть.
+    """
+
+    new_file = forms.FileField(label="Или загрузить новый файл печати", required=False)
+
+    field_order = [
+        "name",
+        "quantity",
+        "plastic",
+        "print_file",
+        "new_file",
+        "unit_weight_g",
+        "unit_time_min",
+        "unit_price",
+    ]
+
     class Meta:
         model = OrderItem
-        fields = ["name", "quantity", "material", "color", "unit_price"]
+        fields = ["name", "quantity", "plastic", "print_file", "unit_weight_g", "unit_time_min", "unit_price"]
+
+    def __init__(self, *args, order, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = order
+        self.created_file = None
+        self.meta_missing = False
+        plastic = StockItem.objects.filter(group__name=PLASTIC_GROUP, is_archived=False)
+        if self.instance.plastic_id:
+            plastic = plastic | StockItem.objects.filter(pk=self.instance.plastic_id)
+        self.fields["plastic"].queryset = plastic.select_related("group")
+        self.fields["plastic"].label_from_instance = lambda s: f"{s.name} — остаток {s.quantity:g} {s.unit}"
+        self.fields["plastic"].empty_label = "— не нужен —"
+        self.fields["print_file"].queryset = order.files.all()
+        self.fields["print_file"].empty_label = "— не выбран —"
+        for name in ("unit_weight_g", "unit_time_min"):
+            self.fields[name].required = False
+
+    def clean(self):
+        data = super().clean()
+        upload, chosen = data.get("new_file"), data.get("print_file")
+        weight, minutes = data.get("unit_weight_g"), data.get("unit_time_min")
+        if (upload or chosen) and (not weight or not minutes):
+            found_weight, found_minutes = self._read_meta(upload, chosen)
+            if not weight and found_weight is not None:
+                weight = found_weight
+            if not minutes and found_minutes is not None:
+                minutes = found_minutes
+            self.meta_missing = not weight or not minutes
+        data["unit_weight_g"] = weight or Decimal("0")
+        data["unit_time_min"] = minutes or 0
+        return data
+
+    @staticmethod
+    def _read_meta(upload, chosen):
+        try:
+            if upload:
+                return read_gcode_meta(upload)
+            with chosen.file.open("rb") as handle:
+                return read_gcode_meta(handle)
+        except (OSError, ValueError):
+            return None, None
+
+    def save(self, commit=True, user=None):
+        item = super().save(commit=False)
+        item.order = self.order
+        upload = self.cleaned_data.get("new_file")
+        if upload:
+            last = self.order.files.filter(title=upload.name).aggregate(m=Max("version"))["m"] or 0
+            self.created_file = OrderFile.objects.create(
+                order=self.order, title=upload.name, version=last + 1, file=upload, uploaded_by=user
+            )
+            item.print_file = self.created_file
+        if commit:
+            item.save()
+        return item
 
 
 class PaymentForm(forms.ModelForm):
@@ -183,10 +262,10 @@ class CostLineForm(forms.ModelForm):
         fields = ["kind", "amount", "note"]
 
 
-class ChecklistForm(forms.ModelForm):
+class WorkStageForm(forms.ModelForm):
     class Meta:
-        model = OrderChecklistItem
-        fields = ["title"]
+        model = WorkStage
+        fields = ["name"]
 
 
 class OrderFileForm(forms.ModelForm):

@@ -5,9 +5,11 @@
 """
 
 import os
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,7 +20,6 @@ from accounts.roles import has_right, right_required
 
 from . import audit
 from .forms import (
-    ChecklistForm,
     ClientDocumentForm,
     ClientForm,
     ClientNoteForm,
@@ -29,6 +30,7 @@ from .forms import (
     OrderForm,
     OrderItemForm,
     PaymentForm,
+    WorkStageForm,
 )
 from .models import (
     Client,
@@ -43,11 +45,13 @@ from .models import (
     OrderItem,
     OrderPayment,
     OrderStatus,
+    WorkStage,
 )
 
 Action = audit.Action
 orders_any = right_required("orders_full", "orders_anonymized")
 orders_full = right_required("orders_full")
+stages_admin = right_required("studio_settings")  # общий список этапов меняет только Админ
 
 
 def _back(name, *args, **query):
@@ -301,7 +305,12 @@ def order_edit(request, pk=None):
         if not order:
             saved.status = OrderStatus.first()
             saved.created_by = request.user
-        saved.save()
+        with transaction.atomic():
+            saved.save()
+            if not order:  # этапы копируются из общего списка; позже список меняется только для новых заказов
+                OrderChecklistItem.objects.bulk_create(
+                    OrderChecklistItem(order=saved, title=stage.name) for stage in WorkStage.objects.all()
+                )
         if order:
             audit.log(request, Action.ORDER_UPDATE, target=saved.number, price=str(saved.price))
             _event(saved, request.user, OrderEvent.Kind.SYSTEM, "Параметры заказа изменены.")
@@ -358,7 +367,6 @@ def order_detail(request, pk):
             "file_groups": list(files.values()),
             "check_done": done,
             "check_total": total,
-            "checklist_form": ChecklistForm(),
             "comment_form": CommentForm(),
             "items_total": sum(i.total for i in order.items.all()),
         },
@@ -403,16 +411,35 @@ def order_comment(request, pk):
 def item_edit(request, order_pk=None, pk=None):
     item = get_object_or_404(OrderItem.objects.select_related("order"), pk=pk) if pk else None
     order = item.order if item else get_object_or_404(Order, pk=order_pk)
-    form = OrderItemForm(request.POST or None, instance=item)
+    form = OrderItemForm(request.POST or None, request.FILES or None, instance=item, order=order)
     if request.method == "POST" and form.is_valid():
-        saved = form.save(commit=False)
-        saved.order = order
-        saved.save()
+        saved = form.save(user=request.user)
+        if form.created_file:
+            f = form.created_file
+            _event(order, request.user, OrderEvent.Kind.SYSTEM, f"Файл «{f.title}», версия {f.version}.")
+            audit.log(request, Action.ORDER_FILE, target=order.number, file=f.title, version=f.version)
         audit.log(request, Action.ORDER_ITEM, target=order.number, item=saved.name, quantity=saved.quantity)
         messages.success(request, f"Изделие «{saved.name}» сохранено.")
+        if form.meta_missing:
+            messages.warning(
+                request, "Время или вес в файле не найдены (слайсер их не записал). Введите вручную."
+            )
+        if saved.plastic_id and saved.unit_weight_g and saved.plastic.grams_per_unit is None:
+            messages.warning(
+                request,
+                f"«{saved.plastic}» учитывается в «{saved.plastic.unit}»: расход в граммах не сверить "
+                "с остатком и не списать автоматически.",
+            )
+        shortage = saved.shortage_grams
+        if shortage > 0:
+            messages.warning(
+                request,
+                f"Пластика «{saved.plastic}» на складе не хватает: нужно ещё {shortage:g} г "
+                "сверх остатка с учётом резерва под другие заказы.",
+            )
         return redirect(_order_back(order.pk, "items"))
     title = f"Изделие «{item.name}»" if item else f"Новое изделие — {order.number}"
-    return _form_page(request, form, title, _order_back(order.pk, "items"))
+    return _form_page(request, form, title, _order_back(order.pk, "items"), multipart=True)
 
 
 @orders_full
@@ -436,10 +463,41 @@ def item_printed(request, pk):
     except ValueError:
         messages.error(request, "Укажите число напечатанных изделий.")
     else:
-        item.printed = max(0, min(printed, item.quantity))
-        item.save(update_fields=["printed"])
+        with transaction.atomic():
+            delta = max(0, min(printed, item.quantity)) - item.printed
+            item.printed += delta
+            item.save(update_fields=["printed"])
+            _write_off_plastic(request, item, delta)
         audit.log(request, Action.ORDER_ITEM, target=item.order.number, item=item.name, printed=item.printed)
     return redirect(_order_back(item.order_id, "items"))
+
+
+def _write_off_plastic(request, item, delta):
+    """Списание пластика со склада по изменению счётчика напечатанного (минус — возврат на склад).
+
+    Резерв пересчитывается сам: он считается по ещё не напечатанной части. Если единица позиции
+    не вес (катушки, штуки), граммы не пересчитать — тогда остаток правят вручную.
+    """
+    stock = item.plastic
+    if not delta or stock is None or not item.unit_weight_g or stock.grams_per_unit is None:
+        return
+    grams = item.unit_weight_g * delta
+    change = (grams / stock.grams_per_unit).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    stock.quantity = max(stock.quantity - change, Decimal("0"))
+    stock.save(update_fields=["quantity"])
+    verb = "Списано со склада" if delta > 0 else "Возвращено на склад"
+    text = f"{verb}: {abs(grams):g} г пластика «{stock.name}» (изделие «{item.name}»)."
+    _event(item.order, request.user, OrderEvent.Kind.SYSTEM, text)
+    audit.log(
+        request,
+        Action.ORDER_STOCK,
+        target=item.order.number,
+        stock=stock.name,
+        grams=str(grams),
+        printed_delta=delta,
+    )
+    if stock.is_low:
+        messages.warning(request, f"Пластика «{stock.name}» мало: остаток {stock.quantity:g} {stock.unit}.")
 
 
 # Деньги
@@ -511,20 +569,6 @@ def cost_delete(request, pk):
 
 @orders_any
 @require_POST
-def checklist_add(request, pk):
-    order = get_object_or_404(Order, pk=pk)
-    form = ChecklistForm(request.POST)
-    if form.is_valid():
-        item = form.save(commit=False)
-        item.order = order
-        item.save()
-    else:
-        _flash_errors(request, form)
-    return redirect("order_detail", pk=order.pk)
-
-
-@orders_any
-@require_POST
 def checklist_toggle(request, pk):
     item = get_object_or_404(OrderChecklistItem, pk=pk)
     item.done = not item.done
@@ -534,13 +578,47 @@ def checklist_toggle(request, pk):
     return redirect("order_detail", pk=item.order_id)
 
 
-@orders_any
+@stages_admin
+def stages(request):
+    """Общий список этапов: только Админ. Менеджер и оператор отмечают этапы в заказе, но не правят список."""
+    form = WorkStageForm()
+    if request.method == "POST":
+        form = WorkStageForm(request.POST)
+        if form.is_valid():
+            stage = form.save(commit=False)
+            stage.order = (WorkStage.objects.aggregate(m=Max("order"))["m"] or 0) + 1
+            stage.save()
+            audit.log(request, Action.STAGE_CATALOG, target=stage.name, added=True)
+            messages.success(request, f"Этап «{stage.name}» добавлен. Он появится в новых заказах.")
+            return redirect("stages")
+    return render(request, "core/stages.html", {"stages": WorkStage.objects.all(), "form": form})
+
+
+@stages_admin
 @require_POST
-def checklist_delete(request, pk):
-    item = get_object_or_404(OrderChecklistItem, pk=pk)
-    order_pk = item.order_id
-    item.delete()
-    return redirect("order_detail", pk=order_pk)
+def stage_delete(request, pk):
+    stage = get_object_or_404(WorkStage, pk=pk)
+    audit.log(request, Action.STAGE_CATALOG, target=stage.name, deleted=True)
+    stage.delete()
+    messages.success(request, f"Этап «{stage.name}» удалён из списка. В существующих заказах он остаётся.")
+    return redirect("stages")
+
+
+@stages_admin
+@require_POST
+def stage_move(request, pk):
+    stage = get_object_or_404(WorkStage, pk=pk)
+    ordered = list(WorkStage.objects.all())
+    index = ordered.index(stage)
+    target = index + (-1 if request.POST.get("dir") == "up" else 1)
+    if 0 <= target < len(ordered):
+        ordered[index], ordered[target] = ordered[target], ordered[index]
+        for position, item in enumerate(ordered, start=1):  # нумеруем заново: порядок мог совпадать
+            if item.order != position:
+                item.order = position
+                item.save(update_fields=["order"])
+        audit.log(request, Action.STAGE_CATALOG, target=stage.name, moved=request.POST.get("dir"))
+    return redirect("stages")
 
 
 # Файлы

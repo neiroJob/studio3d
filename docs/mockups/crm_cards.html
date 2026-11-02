@@ -116,6 +116,12 @@ tr.click:hover td{background:var(--panel2)}
 .lock{font-size:12px;color:var(--ink3)}
 /* role: operator sees order without client / money */
 body.op .mgr{display:none!important}
+/* только администратор: добавлять и убирать этапы работ */
+body:not(.adm) .adm{display:none!important}
+.stage{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+.stage .btn{padding:0 8px;line-height:1.5}
+.icard{border:1px solid var(--line);border-radius:8px;padding:14px;background:var(--panel2)}
+.icard+.icard{margin-top:12px}
 /* modal & toast */
 .modal-back{position:fixed;inset:0;background:rgba(10,14,19,.5);display:none;align-items:flex-start;justify-content:center;padding:6vh 14px;z-index:50;overflow-y:auto}
 .modal-back.open{display:flex}
@@ -140,15 +146,16 @@ body.op .mgr{display:none!important}
   <div class="row" role="tablist" aria-label="Экран">
     <button class="btn sm pri" data-screen="order" id="b-order">Карточка заказа</button>
     <button class="btn sm" data-screen="client" id="b-client">Карточка клиента</button>
+    <button class="btn sm mgr" data-screen="new" id="b-new">Новый заказ</button>
   </div>
   <span class="spacer"></span>
   <div class="rolebox"><label for="role">Смотреть как</label>
-    <select id="role"><option value="mgr">Менеджер</option><option value="op">Оператор</option></select></div>
+    <select id="role"><option value="adm">Админ</option><option value="mgr" selected>Менеджер</option><option value="op">Оператор</option></select></div>
   <button class="btn sm" id="theme">Тема</button>
 </div>
 
 <main>
-<div class="note">Макет для согласования. Данные придуманные, кнопки показывают поведение, но ничего не сохраняют. Переключайте экран, роль и тему сверху.</div>
+<div class="note">Макет для согласования. Данные придуманные, кнопки показывают поведение, но ничего не сохраняют. Переключайте экран, роль и тему сверху. Что изменилось в этой версии: набор этапов работ фиксированный (добавлять и убирать этапы может только Админ), заказ создают только Админ и Менеджер, в заказе указываются пластик со склада и файл печати со временем и весом.</div>
 
 <!-- ============ КАРТОЧКА ЗАКАЗА ============ -->
 <section id="s-order">
@@ -195,14 +202,15 @@ body.op .mgr{display:none!important}
     <!-- Изделия -->
     <div class="panel" data-opane="items">
       <div class="row"><h2 style="margin:0">Изделия</h2><span class="spacer"></span><button class="btn sm" data-act="newitem">Добавить изделие</button></div>
-      <div class="tbl-wrap"><table style="margin-top:8px"><tr><th>Изделие</th><th class="num">Заказано</th><th>Пластик (катушка)</th><th class="num">Вес шт.</th><th class="num mgr">Цена шт.</th><th class="num mgr">Сумма</th><th>Напечатано</th></tr>
-        <tr><td><b>Корпус датчика v3</b><div class="hint">korpus_datchika_v3.3mf</div></td><td class="num">40</td><td>ASA, серый<div class="hint">S-021, на Q1Pro-01</div></td><td class="num">41 г</td><td class="num mgr">250 ₽</td><td class="num mgr">10 000 ₽</td>
+      <div class="tbl-wrap"><table style="margin-top:8px"><tr><th>Изделие</th><th class="num">Заказано</th><th>Пластик со склада</th><th>Файл печати</th><th class="num">Вес шт.</th><th class="num">Время шт.</th><th class="num mgr">Цена шт.</th><th class="num mgr">Сумма</th><th>Напечатано</th></tr>
+        <tr><td><b>Корпус датчика v3</b></td><td class="num">40</td><td>ASA серый<div class="hint">на складе 8,4 кг</div></td><td>korpus_datchika_v3.gcode</td><td class="num">41 г</td><td class="num">45 мин</td><td class="num mgr">250 ₽</td><td class="num mgr">10 000 ₽</td>
           <td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="--c:var(--st-print);width:90px"><i style="width:25%"></i></div><span class="small">10 / 40</span></div></td></tr>
-        <tr><td><b>Крышка корпуса</b><div class="hint">kryshka_v3.3mf</div></td><td class="num">40</td><td>ASA, серый<div class="hint">S-021</div></td><td class="num">9 г</td><td class="num mgr">105 ₽</td><td class="num mgr">4 200 ₽</td>
+        <tr><td><b>Крышка корпуса</b></td><td class="num">40</td><td>ASA серый<div class="hint">на складе 8,4 кг</div></td><td>kryshka_v3.gcode</td><td class="num">9 г</td><td class="num">8 мин</td><td class="num mgr">105 ₽</td><td class="num mgr">4 200 ₽</td>
           <td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="--c:var(--st-print);width:90px"><i style="width:50%"></i></div><span class="small">20 / 40</span></div></td></tr>
-        <tr class="total mgr"><td colspan="5">Итого по заказу</td><td class="num">14 200 ₽</td><td></td></tr>
+        <tr class="total"><td colspan="4">Итого по заказу</td><td class="num">2 000 г</td><td class="num">35 ч 20 мин</td><td class="num mgr"></td><td class="num mgr">14 200 ₽</td><td></td></tr>
       </table></div>
-      <p class="hint">Принтер в заказе не выбирается: принтер и катушка привязываются при запуске печати, задания попадают в заказ сами.</p>
+      <p class="hint">Пластик выбирается из позиций склада, вес и время печати подставляются из файла печати (как в карточке принтера: данные G-code) и могут быть поправлены вручную. Расход по заказу: ASA серый 2 000 г, на складе 8,4 кг, хватает. Принтер в заказе не выбирается: он назначается при запуске печати, задания попадают в заказ сами.</p>
+      <p class="hint" style="margin-top:0">Пластик резервируется под заказ при его создании. Со склада списывается после каждого завершённого задания печати по фактическому расходу (предложение, нужно подтвердить).</p>
     </div>
 
     <!-- Печать -->
@@ -270,12 +278,10 @@ body.op .mgr{display:none!important}
    <!-- правая колонка -->
    <div class="stack">
     <div class="panel">
-      <h2>Этапы работ</h2>
-      <label class="check"><input type="checkbox" checked> Нарезать</label>
-      <label class="check"><input type="checkbox" class="cl"> Напечатать <span class="hint">30 / 80</span></label>
-      <label class="check"><input type="checkbox" class="cl"> Постобработка <span class="hint">3 ч по плану</span></label>
-      <label class="check"><input type="checkbox" class="cl"> Упаковать</label>
-      <div class="small muted" id="cl-count" style="margin-top:6px">Готово 1 из 4</div>
+      <div class="row"><h2 style="margin:0">Этапы работ</h2><span class="spacer"></span><button class="btn sm adm" data-act="wsadd">+ Этап</button></div>
+      <div id="ws" style="margin-top:6px"></div>
+      <div class="small muted" id="cl-count" style="margin-top:6px"></div>
+      <p class="hint" style="margin-bottom:0">Список этапов общий для всех заказов. Отмечать этапы могут Админ, Менеджер и Оператор. Добавлять, убирать и переставлять этапы может только Админ (переключите роль сверху на «Админ»).</p>
     </div>
     <div class="panel mgr">
       <h2>Клиент</h2>
@@ -288,6 +294,55 @@ body.op .mgr{display:none!important}
       <p class="hint" style="margin-bottom:0">Если заказ просрочен или стоит в одном статусе дольше нормы, карточка и строка в списке подсвечиваются.</p>
     </div>
    </div>
+  </div>
+</section>
+
+<!-- ============ НОВЫЙ ЗАКАЗ ============ -->
+<section id="s-new" hidden>
+  <div class="deny" id="n-deny" hidden><b>Нет доступа</b><br>Создавать и редактировать заказы могут только Админ и Менеджер. У Оператора нет пункта «Добавить заказ», а прямой адрес даёт отказ в доступе.</div>
+  <div id="n-body">
+  <div class="row" style="margin-bottom:12px"><a href="#" class="small muted" data-screen="order">← Заказы</a></div>
+  <div class="panel head">
+    <div class="row"><h1>Новый заказ</h1><span class="pill c" style="--c:var(--st-idle)">Новый</span></div>
+    <div class="sub">Номер З-0146 присвоится при сохранении. Заказ создаёт Админ или Менеджер.</div>
+  </div>
+  <div class="g21" style="margin-top:16px">
+   <div class="stack">
+    <div class="panel">
+      <h2>1. Клиент и сроки</h2>
+      <div class="form">
+        <label class="field wide">Клиент<select><option>ИП Соколов А. В.</option><option>ООО «Техномаш»</option><option>Кузнецов Илья (самозанятый)</option><option>Мельникова Ольга (физлицо)</option></select></label>
+        <label class="field">Срок готовности<input value="30.11.2026"></label>
+        <label class="field">Ответственный<select><option>Анна</option><option>Игорь</option></select></label>
+        <label class="field wide">Комментарий к заказу<input placeholder="например, нужен акт, самовывоз"></label>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="btn sm" data-act="newclient">+ Новый клиент</button><span class="hint">Нет клиента в списке: создайте карточку, затем вернитесь к заказу.</span></div>
+    </div>
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">2. Изделия, пластик и файл печати</h2><span class="spacer"></span><button class="btn sm" data-act="addcard">Добавить изделие</button></div>
+      <p class="hint">Для каждого изделия выберите пластик со склада и файл печати. Время и вес подставляются из файла (как в карточке принтера: данные G-code), их можно поправить.</p>
+      <div id="n-items"></div>
+    </div>
+   </div>
+   <div class="stack">
+    <div class="panel">
+      <h2>3. Этапы работ</h2>
+      <p class="small" style="margin-top:0">В заказ копируется общий список этапов:</p>
+      <div id="n-stages" class="small"></div>
+      <p class="hint" style="margin-bottom:0">Менять список этапов может только Админ.</p>
+    </div>
+    <div class="panel">
+      <h2>Что произойдёт при сохранении</h2>
+      <ul class="small" style="margin:0;padding-left:18px">
+        <li>создастся заказ в статусе «Новый» и запись в журнале;</li>
+        <li>скопируются этапы работ;</li>
+        <li>пластик зарезервируется на складе под заказ;</li>
+        <li>файлы печати попадут в «Файлы» заказа.</li>
+      </ul>
+      <div class="row" style="margin-top:14px"><button class="btn" data-screen="order">Отмена</button><span class="spacer"></span><button class="btn pri" data-act="createorder">Создать заказ</button></div>
+    </div>
+   </div>
+  </div>
   </div>
 </section>
 
@@ -307,7 +362,7 @@ body.op .mgr{display:none!important}
       <span class="spacer"></span>
       <button class="btn" data-toast="Сообщение клиенту в Telegram">Написать</button>
       <button class="btn" data-toast="Данные клиента можно править (макет)">Редактировать</button>
-      <button class="btn pri" data-toast="Откроется «Новый заказ» с этим клиентом">Новый заказ</button>
+      <button class="btn pri" data-screen="new">Новый заказ</button>
     </div>
     <div class="sub">Клиент с 03.07.2026 · основной контакт Соколов Андрей · общаемся в Telegram</div>
   </div>
@@ -400,15 +455,18 @@ function closeModal(){$('#mb').classList.remove('open')}
 /* ---- экран и роль ---- */
 let screen='order', role='mgr';
 function apply(){
-  $('#s-order').hidden=screen!=='order'; $('#s-client').hidden=screen!=='client';
-  $('#b-order').classList.toggle('pri',screen==='order'); $('#b-client').classList.toggle('pri',screen==='client');
+  if(role==='op' && screen==='new') screen='order';
+  $('#s-order').hidden=screen!=='order'; $('#s-client').hidden=screen!=='client'; $('#s-new').hidden=screen!=='new';
+  $('#b-order').classList.toggle('pri',screen==='order'); $('#b-client').classList.toggle('pri',screen==='client'); $('#b-new').classList.toggle('pri',screen==='new');
   document.body.classList.toggle('op',role==='op');
+  document.body.classList.toggle('adm',role==='adm');
   $$('.op[hidden], .op').forEach(e=>{ if(e.tagName!=='BODY') e.hidden=role!=='op' });
   $('#c-deny').hidden=role!=='op'; $('#c-body').hidden=role==='op';
+  $('#n-deny').hidden=true; $('#n-body').hidden=false;
   if(role==='op' && ['money'].includes(otab)) setOTab('items');
   window.scrollTo(0,0);
 }
-$('#role').onchange=e=>{role=e.target.value;apply();toast(role==='op'?'Вид оператора: заказ без клиента, контактов и денег':'Вид менеджера')};
+$('#role').onchange=e=>{role=e.target.value;apply();toast(role==='op'?'Вид оператора: заказ без клиента и денег, заказы не создаёт':role==='adm'?'Вид админа: всё как у менеджера, плюс управление списком этапов работ':'Вид менеджера: заказы создаёт, список этапов не меняет')};
 $('#theme').onclick=()=>{const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;r.dataset.theme=dark?'light':'dark'};
 
 /* ---- статусы заказа ---- */
@@ -432,7 +490,7 @@ const COST=[
  ['Электричество','29 кВт·ч × 6,80 ₽',197],
  ['Простой принтера включённым','4,5 ч × 0,15 кВт × 6,80 ₽',5],
  ['Доставка пластика','2 кг × 60 ₽/кг',120],
- ['Амортизация оборудования','32,2 ч × 18 ₽/ч',580],
+ ['Амортизация оборудования','35,3 ч × 18 ₽/ч',635],
  ['Постобработка','3 ч × 600 ₽/ч',1800],
  ['Транспортировка заказа','доставка клиенту, СДЭК',450],
  ['Налог','6 % от цены (УСН «доходы»)',Math.round(PRICE*0.06)]
@@ -452,8 +510,47 @@ $('#o-tabs').onclick=e=>{const b=e.target.closest('[data-otab]');if(b)setOTab(b.
 $('#c-tabs').onclick=e=>{const b=e.target.closest('[data-ctab]');if(b)setCTab(b.dataset.ctab)};
 
 /* ---- чек-лист ---- */
-function clCount(){const all=$$('#s-order .check input');$('#cl-count').textContent=`Готово ${all.filter(c=>c.checked).length} из ${all.length}`}
-$$('#s-order .check input').forEach(c=>c.onchange=clCount);
+const WS=[{n:'Проектирование / создание 3D-модели',d:true},{n:'Согласование модели / чертежа',d:true,h:'клиент подтвердил 26.10'},{n:'В печати',d:false,h:'30 / 80 шт.'},{n:'Распечатано',d:false},{n:'Постобработка',d:false,h:'3 ч по плану'},{n:'Упаковка',d:false},{n:'Отправка',d:false}];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderWS(){
+  const cur=WS.findIndex(s=>!s.d);
+  $('#ws').innerHTML=WS.map((s,i)=>`<div class="stage"><label class="check" style="flex:1"><input type="checkbox" data-ws="${i}" ${s.d?'checked':''}> ${esc(s.n)}${s.h?` <span class="hint">${esc(s.h)}</span>`:''}${i===cur?' <span class="pill c" style="--c:var(--st-print)">сейчас</span>':''}</label><span class="adm"><button class="btn sm" data-act="wsup" data-i="${i}" title="Выше">↑</button> <button class="btn sm" data-act="wsdel" data-i="${i}" title="Убрать этап">×</button></span></div>`).join('');
+  $('#n-stages').innerHTML=WS.map((s,i)=>`<div>${i+1}. ${esc(s.n)}</div>`).join('');
+  clCount();
+}
+function clCount(){$('#cl-count').textContent=`Готово ${WS.filter(s=>s.d).length} из ${WS.length}`}
+$('#ws').onchange=e=>{const c=e.target.closest('[data-ws]');if(!c)return;const s=WS[+c.dataset.ws];s.d=c.checked;log(`Анна: этап «${s.n}» ${s.d?'отмечен выполненным':'снят'}`);renderWS()};
+
+/* ---- склад и файлы печати для изделий ---- */
+const STOCK=[['ASA серый',8400],['ASA чёрный',3100],['PETG белый',12000],['PLA чёрный',400],['TPU чёрный',1500]];
+const PFILES={'korpus_datchika_v3.gcode':[45,41],'kryshka_v3.gcode':[8,9]};
+function itemCard(o){
+  o=o||{};
+  return `<div class="icard"><div class="form">
+    <label class="field wide">Название<input value="${esc(o.name||'')}"></label>
+    <label class="field">Количество, шт.<input type="number" data-f="qty" value="${o.qty||1}"></label>
+    <label class="field">Цена за штуку, ₽<input type="number" value="${o.price||''}"></label>
+    <label class="field wide">Пластик со склада<select data-f="stock">${STOCK.map((s,i)=>`<option value="${i}" ${o.stock===i?'selected':''}>${s[0]} · на складе ${(s[1]/1000).toLocaleString('ru-RU')} кг${s[1]<500?' (мало)':''}</option>`).join('')}</select></label>
+    <label class="field wide">Файл печати<select data-f="file"><option value="">— выбрать файл —</option>${Object.keys(PFILES).map(f=>`<option ${o.file===f?'selected':''}>${f}</option>`).join('')}<option value="__new">Загрузить новый файл…</option></select></label>
+    <label class="field">Время печати шт., мин<input type="number" data-f="min" value="${o.min||''}"></label>
+    <label class="field">Вес шт., г<input type="number" data-f="g" value="${o.g||''}"></label>
+  </div><div class="small" data-f="calc" style="margin-top:8px"></div></div>`;
+}
+function calcCard(c){
+  const q=+$('[data-f=qty]',c).value||0, g=+$('[data-f=g]',c).value||0, m=+$('[data-f=min]',c).value||0, st=STOCK[+$('[data-f=stock]',c).value];
+  const need=q*g, mins=q*m, el=$('[data-f=calc]',c);
+  if(!g&&!m){el.innerHTML='<span class="muted">Выберите файл печати: время и вес подставятся из него.</span>';return}
+  const ok=st[1]>=need, h=Math.floor(mins/60), mm=mins%60;
+  el.innerHTML=`Расход: ${g} г × ${q} = <b>${need.toLocaleString('ru-RU')} г</b>, печать около <b>${h} ч ${mm} мин</b>. `+(ok?`<span class="pill c" style="--c:var(--st-done)">пластика хватает</span>`:`<span class="pill c" style="--c:var(--st-off)">не хватает ${(need-st[1]).toLocaleString('ru-RU')} г, нужна закупка</span>`);
+}
+document.addEventListener('change',e=>{
+  const c=e.target.closest('.icard');if(!c)return;
+  if(e.target.dataset.f==='file'){const f=e.target.value;
+    if(f==='__new'){toast('Откроется выбор файла: время и вес прочитаются из G-code');}
+    else if(PFILES[f]){$('[data-f=min]',c).value=PFILES[f][0];$('[data-f=g]',c).value=PFILES[f][1];toast('Время и вес взяты из файла печати')}}
+  calcCard(c);
+});
+document.addEventListener('input',e=>{const c=e.target.closest('.icard');if(c)calcCard(c)});
 
 /* ---- реквизиты по типу клиента ---- */
 const TYPES={
@@ -490,7 +587,14 @@ document.addEventListener('click',e=>{
     case 'close':closeModal();break;
     case 'link':modal('Ссылка для клиента','<p>Клиент переходит по ссылке, бот привязывает его к заказу и присылает статус.</p><div class="field"><input readonly value="https://t.me/studio3d_print_bot?start=o0145-7f3k2"></div>','<button class="btn" data-act="close">Закрыть</button><button class="btn pri" data-toast="Ссылка скопирована" data-act="close">Скопировать</button>');break;
     case 'more':modal('Действия с заказом','<div class="row" style="flex-direction:column;align-items:stretch"><button class="btn" data-toast="Коммерческое предложение PDF сформировано" data-act="close">Коммерческое предложение (PDF)</button><button class="btn" data-toast="Счёт сформирован из шаблона" data-act="close">Выставить счёт</button><button class="btn" data-toast="Заказ в архиве" data-act="close">В архив</button><button class="btn warn" data-toast="Заказ отменён" data-act="close">Отменить заказ</button></div>');break;
-    case 'newitem':modal('Добавить изделие','<div class="form"><label class="field wide">Название<input></label><label class="field">Количество<input type="number" value="1"></label><label class="field">Пластик<select><option>ASA</option><option>PETG</option><option>PLA</option><option>TPU</option></select></label><label class="field">Цвет<select><option>Серый</option><option>Чёрный</option><option>Белый</option></select></label><label class="field">Цена за штуку, ₽<input type="number"></label></div><p class="hint">Катушка и принтер будут выбраны при запуске печати.</p>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Изделие добавлено (макет)" data-act="close">Добавить</button>');break;
+    case 'newitem':modal('Добавить изделие',itemCard({})+'<p class="hint">Принтер будет выбран при запуске печати. Пластик резервируется на складе под заказ.</p>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Изделие добавлено (макет)" data-act="close">Добавить</button>');calcCard($('#m-body .icard'));break;
+    case 'addcard':{const d=document.createElement('div');d.innerHTML=itemCard({});$('#n-items').append(d.firstElementChild);calcCard($('#n-items').lastElementChild);break}
+    case 'newclient':modal('Новый клиент','<div class="form"><label class="field">Тип<select><option>ИП</option><option>Юрлицо</option><option>Самозанятый</option><option>Физлицо</option></select></label><label class="field wide">Название или ФИО<input></label><label class="field">Контактное лицо<input></label><label class="field">Телефон или Telegram<input></label></div><p class="hint">Остальные реквизиты, документы и заметки заполняются в карточке клиента.</p>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Клиент создан, он выбран в заказе (макет)" data-act="close">Создать клиента</button>');break;
+    case 'createorder':toast('Заказ З-0146 создан (макет): статус «Новый», этапы скопированы, пластик зарезервирован');break;
+    case 'wsadd':modal('Новый этап работ','<div class="form"><label class="field wide">Название этапа<input id="ws-name" placeholder="например, Покраска"></label></div><p class="hint">Этап появится во всех новых заказах. В уже созданных заказах список не меняется.</p>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-act="wssave">Добавить</button>');break;
+    case 'wssave':{const v=$('#ws-name').value.trim();if(v){WS.push({n:v,d:false});renderWS();log('Админ: в список этапов добавлен «'+v+'»')}closeModal();break}
+    case 'wsdel':{const i=+a.dataset.i;const n=WS[i].n;WS.splice(i,1);renderWS();toast('Этап «'+n+'» убран из списка (в созданных заказах остаётся)');break}
+    case 'wsup':{const i=+a.dataset.i;if(i>0){[WS[i-1],WS[i]]=[WS[i],WS[i-1]];renderWS()}break}
     case 'pay':modal('Добавить платёж','<div class="form"><label class="field">Дата<input value="27.10.2026"></label><label class="field">Сумма, ₽<input type="number" id="pay-sum" value="7200"></label><label class="field">Способ<select><option>Безнал, по счёту</option><option>Перевод на карту</option><option>Наличные</option><option>Чек самозанятого</option></select></label><label class="field">Документ<input placeholder="чек, платёжное поручение"></label></div>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-act="paysave">Сохранить</button>');break;
     case 'paysave':{const v=+$('#pay-sum').value||0;if(v>0){paid+=v;const tr=document.createElement('tr');tr.innerHTML=`<td>27.10.2026</td><td class="num">${rub(v)}</td><td>—</td><td>—</td><td>Анна</td>`;$('#pay-tbl').rows[0].after(tr);renderPay();log('Анна: платёж '+rub(v));}closeModal();toast('Платёж записан');break}
     case 'cost':modal('Добавить статью','<div class="form"><label class="field">Статья<select><option>Расходник со склада</option><option>Брак</option><option>Другое</option></select></label><label class="field">Сумма, ₽<input type="number"></label><label class="field wide">Комментарий<input></label></div>','<button class="btn" data-act="close">Отмена</button><button class="btn pri" data-toast="Статья добавлена (макет)" data-act="close">Добавить</button>');break;
@@ -502,7 +606,9 @@ document.addEventListener('click',e=>{
 $('#mb').addEventListener('click',e=>{if(e.target.id==='mb')closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
-renderSteps();renderCost();renderClient('ip');renderPay();clCount();apply();
+$('#n-items').innerHTML=itemCard({name:'Корпус датчика v4',qty:40,price:260,stock:0,file:'korpus_datchika_v3.gcode',min:45,g:41});
+calcCard($('#n-items .icard'));
+renderSteps();renderCost();renderClient('ip');renderPay();renderWS();apply();
 </script>
 </body>
 </html>

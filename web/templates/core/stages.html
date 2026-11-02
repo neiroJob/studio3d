@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Этапы работ{% endblock %}
+{% block heading %}Этапы работ{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:860px">
+  <p class="muted small">Общий список этапов. При создании заказа он копируется в заказ; менеджер и оператор только отмечают этапы. Изменения действуют для новых заказов, в существующих список остаётся прежним.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th class="num">№</th><th>Этап</th><th></th></tr>
+    {% for s in stages %}
+    <tr>
+      <td class="num">{{ forloop.counter }}</td>
+      <td><b>{{ s.name }}</b></td>
+      <td class="num">
+        <form class="inline" method="post" action="{% url 'stage_move' s.pk %}">{% csrf_token %}<input type="hidden" name="dir" value="up"><button class="btn sm" type="submit" aria-label="Выше"{% if forloop.first %} disabled{% endif %}>↑</button></form>
+        <form class="inline" method="post" action="{% url 'stage_move' s.pk %}">{% csrf_token %}<input type="hidden" name="dir" value="down"><button class="btn sm" type="submit" aria-label="Ниже"{% if forloop.last %} disabled{% endif %}>↓</button></form>
+        <form class="inline" method="post" action="{% url 'stage_delete' s.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить</button></form>
+      </td>
+    </tr>
+    {% empty %}<tr><td colspan="3" class="muted">Этапов нет: новые заказы будут создаваться без списка этапов.</td></tr>{% endfor %}
+  </table></div>
+
+  <form method="post" class="stack" style="margin-top:16px" novalidate>
+    {% csrf_token %}
+    <h2>Добавить этап</h2>
+    <div class="form">{% include "_field.html" with field=form.name wide=True %}</div>
+    <div><button class="btn pri" type="submit">Добавить в конец списка</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -59,12 +59,20 @@
       {% if tab == 'items' %}
       {% if full %}<div class="row" style="margin-bottom:12px"><span class="spacer"></span><a class="btn pri" href="{% url 'item_create' order.pk %}">Добавить изделие</a></div>{% endif %}
       <div class="tbl-wrap"><table>
-        <tr><th>Изделие</th><th>Пластик</th><th class="num">Кол-во</th><th>Напечатано</th>{% if full %}<th class="num">Цена за шт.</th><th class="num">Сумма</th><th></th>{% endif %}</tr>
+        <tr><th>Изделие</th><th>Пластик</th><th class="num">Кол-во</th><th class="num">Расход и время</th><th>Напечатано</th>{% if full %}<th class="num">Цена за шт.</th><th class="num">Сумма</th><th></th>{% endif %}</tr>
         {% for i in order.items.all %}
         <tr>
-          <td><b>{{ i.name }}</b></td>
-          <td>{{ i.material }}{% if i.color %} · {{ i.color }}{% endif %}</td>
+          <td><b>{{ i.name }}</b>{% if i.print_file %}<div class="muted"><a href="{% url 'file_download' i.print_file.pk %}">{{ i.print_file.title }}</a> v{{ i.print_file.version }}</div>{% endif %}</td>
+          <td>
+            {% if i.plastic %}{{ i.plastic.name }}<div class="muted">остаток {{ i.plastic.quantity|floatformat:"-2" }} {{ i.plastic.unit }}{% if i.plastic.is_low %} · <span class="pill c" style="--c:var(--err)">мало</span>{% endif %}</div>
+            {% if i.shortage_grams > 0 %}<div class="overdue">не хватает {{ i.shortage_grams|floatformat:"-1" }} г</div>{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
           <td class="num">{{ i.quantity }}</td>
+          <td class="num">
+            {% if i.unit_weight_g %}{{ i.need_grams|floatformat:"-1" }} г{% else %}—{% endif %}
+            <div class="muted">{% if i.unit_time_min %}{{ i.total_time_min }} мин{% else %}время не задано{% endif %}</div>
+          </td>
           <td>
             <div class="bar" style="margin-bottom:4px"><i style="width:{{ i.progress_percent }}%"></i></div>
             <form class="inline-edit" method="post" action="{% url 'item_printed' i.pk %}">{% csrf_token %}
@@ -81,8 +89,8 @@
           </td>
           {% endif %}
         </tr>
-        {% empty %}<tr><td colspan="{% if full %}7{% else %}4{% endif %}" class="muted">Изделий пока нет.</td></tr>{% endfor %}
-        {% if full and order.items.all %}<tr class="sum-row"><td colspan="5">Итого по изделиям</td><td class="num">{{ items_total }}</td><td></td></tr>{% endif %}
+        {% empty %}<tr><td colspan="{% if full %}8{% else %}5{% endif %}" class="muted">Изделий пока нет.</td></tr>{% endfor %}
+        {% if full and order.items.all %}<tr class="sum-row"><td colspan="6">Итого по изделиям</td><td class="num">{{ items_total }}</td><td></td></tr>{% endif %}
       </table></div>
 
       {% elif tab == 'files' %}
@@ -153,15 +161,10 @@
             <button class="btn sm" type="submit" aria-pressed="{{ c.done|yesno:'true,false' }}">{% if c.done %}☑{% else %}☐{% endif %}</button>
           </form>
           {% if c.done %}<s class="muted">{{ c.title }}</s>{% else %}{{ c.title }}{% endif %}
-          <form class="inline" method="post" action="{% url 'checklist_delete' c.pk %}">{% csrf_token %}<button class="btn sm" type="submit" aria-label="Убрать этап">×</button></form>
         </li>
         {% empty %}<li class="muted">Этапов нет.</li>{% endfor %}
       </ul>
-      <form method="post" action="{% url 'checklist_add' order.pk %}" class="inline-edit" style="margin-top:12px">
-        {% csrf_token %}
-        <input type="text" name="title" placeholder="Новый этап" style="width:160px" aria-label="Новый этап" required>
-        <button class="btn sm" type="submit">Добавить</button>
-      </form>
+      {% if "studio_settings" in rights %}<p class="muted" style="margin-top:12px">Список этапов меняется на странице <a href="{% url 'stages' %}">«Этапы работ»</a> и действует для новых заказов.</p>{% endif %}
     </div>
   </div>
 </div>

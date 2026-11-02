@@ -20,7 +20,7 @@
     {% include "_field.html" with field=form.price %}
     {% include "_field.html" with field=form.tax_percent %}
   </div>
-  {% if not order %}<p class="hint">Изделия, файлы и этапы работ добавляются на карточке заказа после сохранения.</p>{% endif %}
+  {% if not order %}<p class="hint">Этапы работ копируются в заказ из общего списка автоматически. Изделия (пластик со склада, файл печати) и файлы добавляются на карточке заказа после сохранения.</p>{% endif %}
   <div class="form-actions">
     <button class="btn pri" type="submit">Сохранить</button>
     <a class="btn" href="{% if order %}{% url 'order_detail' order.pk %}{% else %}{% url 'orders' %}{% endif %}">Отмена</a>

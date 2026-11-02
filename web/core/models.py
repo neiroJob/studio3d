@@ -63,6 +63,16 @@ class ElectricityTariff(models.Model):
         return cls.objects.filter(valid_from__lte=date).first()
 
 
+PLASTIC_GROUP = "Пластик"  # группа склада, из которой выбирается пластик для изделий заказа
+GRAMS_PER_UNIT = {
+    "кг": Decimal("1000"),
+    "kg": Decimal("1000"),
+    "г": Decimal("1"),
+    "гр": Decimal("1"),
+    "g": Decimal("1"),
+}
+
+
 class StockGroup(models.Model):
     """Группа позиций склада: пластик, сопла, запчасти, расходники, готовые изделия (ROADMAP.md, «Склад»)."""
 
@@ -105,6 +115,27 @@ class StockItem(models.Model):
     @property
     def is_low(self):
         return self.min_quantity is not None and self.quantity < self.min_quantity
+
+    @property
+    def grams_per_unit(self):
+        """Граммов в единице учёта; `None`, если единица не вес (катушки, штуки) — граммы не пересчитать."""
+        return GRAMS_PER_UNIT.get(self.unit.strip().lower().rstrip("."))
+
+    @property
+    def grams(self):
+        return None if self.grams_per_unit is None else self.quantity * self.grams_per_unit
+
+    def reserved_grams(self, exclude_item=None):
+        """Резерв под заказы: ещё не напечатанная часть изделий в незавершённых заказах."""
+        items = self.order_items.filter(order__status__is_final=False)
+        if exclude_item is not None and exclude_item.pk:
+            items = items.exclude(pk=exclude_item.pk)
+        return sum((i.remaining_grams for i in items), Decimal("0"))
+
+    def available_grams(self, exclude_item=None):
+        """Свободно для нового резерва: остаток минус резерв других изделий. `None` — не считается."""
+        grams = self.grams
+        return None if grams is None else grams - self.reserved_grams(exclude_item)
 
 
 # --- CRM: клиенты и заказы (ROADMAP.md, «CRM») -------------------------------------------------
@@ -391,6 +422,35 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(
         "Цена за штуку, ₽", max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
     )
+    plastic = models.ForeignKey(
+        StockItem,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="order_items",
+        verbose_name="Пластик со склада",
+    )
+    print_file = models.ForeignKey(
+        "OrderFile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="Файл печати",
+    )
+    unit_weight_g = models.DecimalField(
+        "Вес одной штуки, г",
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Из G-code файла печати, можно поправить вручную.",
+    )
+    unit_time_min = models.PositiveIntegerField(
+        "Время печати одной штуки, мин",
+        default=0,
+        help_text="Из G-code файла печати, можно поправить вручную.",
+    )
 
     class Meta:
         ordering = ["pk"]
@@ -399,6 +459,32 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def need_grams(self):
+        """Расход пластика на весь тираж."""
+        return self.unit_weight_g * self.quantity
+
+    @property
+    def remaining_grams(self):
+        """Резерв: пластик на ещё не напечатанные штуки. Напечатанные уже списаны со склада."""
+        if self.plastic_id is None:
+            return Decimal("0")
+        return self.unit_weight_g * max(self.quantity - self.printed, 0)
+
+    @property
+    def total_time_min(self):
+        return self.unit_time_min * self.quantity
+
+    @property
+    def shortage_grams(self):
+        """Сколько граммов не хватает на складе для непечатанной части; 0 — хватает или не считается."""
+        if self.plastic_id is None:
+            return Decimal("0")
+        available = self.plastic.available_grams(exclude_item=self)
+        if available is None:
+            return Decimal("0")
+        return max(self.remaining_grams - available, Decimal("0"))
 
     @property
     def total(self):
@@ -469,8 +555,23 @@ class OrderCostLine(models.Model):
         return f"{self.get_kind_display()}: {self.amount} ₽"
 
 
+class WorkStage(models.Model):
+    """Общий список этапов работ. Копируется в каждый новый заказ; менять его может только Админ."""
+
+    name = models.CharField("Название", max_length=200, unique=True)
+    order = models.PositiveIntegerField("Порядок", default=0)
+
+    class Meta:
+        ordering = ["order", "pk"]
+        verbose_name = "этап работ (общий список)"
+        verbose_name_plural = "этапы работ (общий список)"
+
+    def __str__(self):
+        return self.name
+
+
 class OrderChecklistItem(models.Model):
-    """Этап работ по заказу: нарезать, напечатать, постобработать, упаковать."""
+    """Этап работ в заказе: копия из общего списка `WorkStage` на момент создания заказа."""
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="checklist")
     title = models.CharField("Этап", max_length=200)
@@ -582,6 +683,8 @@ class AuditLog(models.Model):
         ORDER_PAYMENT = "order_payment", "Платёж по заказу"
         ORDER_COST = "order_cost", "Статья себестоимости заказа"
         ORDER_FILE = "order_file", "Файл заказа загружен/удалён"
+        STAGE_CATALOG = "stage_catalog", "Общий список этапов работ изменён"
+        ORDER_STOCK = "order_stock", "Пластик списан под заказ"
 
     created_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
