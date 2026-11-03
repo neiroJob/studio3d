@@ -50,4 +50,10 @@ class ApiTransportTest {
         assertTrue(p.attention)
         assertEquals("Нет данных", duration(p.remaining))
     }
+    @Test fun heatingIdleRequiresAttentionButDisabledPollingDoesNot() {
+        val raw = JSONObject("""{"id":1,"name":"Printer","status":"ready","label":"Готов","heating_idle":["сопло 230 °C"]}""")
+        assertTrue(Printer.from(raw).attention)
+        raw.put("enabled", false)
+        assertFalse(Printer.from(raw).attention)
+    }
 }

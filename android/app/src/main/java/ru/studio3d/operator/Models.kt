@@ -8,14 +8,15 @@ data class Printer(
     val updated: Double, val filename: String, val percent: Int, val remaining: Double?,
     val elapsed: Double, val layer: String, val filament: Boolean?, val light: Boolean?,
     val canLight: Boolean, val camera: Boolean, val printHours: Double, val onHours: Double,
-    val temperatures: String, val faults: List<String>,
+    val temperatures: String, val faults: List<String>, val heatingIdle: List<String>, val enabled: Boolean,
 ) {
-    val attention get() = status in listOf("offline", "error", "paused", "finished") || faults.isNotEmpty()
+    val attention get() = enabled && (status in listOf("offline", "error", "paused", "finished") || faults.isNotEmpty() || heatingIdle.isNotEmpty())
     companion object {
         fun from(o: JSONObject): Printer {
             val job = o.optJSONObject("job")
             val f = o.optJSONObject("filament")
             val faults = o.optJSONArray("faults")
+            val heating = o.optJSONArray("heating_idle")
             val temps = o.optJSONObject("temps")
             val names = mapOf("nozzle" to "Сопло", "bed" to "Стол", "chamber" to "Камера")
             return Printer(
@@ -30,6 +31,8 @@ data class Printer(
                 o.optBoolean("camera"), o.optDouble("print_hours"), o.optDouble("on_hours"),
                 names.mapNotNull { (key, label) -> temps?.optJSONArray(key)?.let { "$label ${it.optDouble(0).toInt()} / ${it.optDouble(1).toInt()} °C" } }.joinToString("\n"),
                 if (faults == null) emptyList() else (0 until faults.length()).map { faults.getString(it) },
+                if (heating == null) emptyList() else (0 until heating.length()).map { heating.getString(it) },
+                o.optBoolean("enabled", true),
             )
         }
     }

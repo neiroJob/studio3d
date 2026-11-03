@@ -265,7 +265,7 @@ class StudioModel(app: Application) : AndroidViewModel(app) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text(studio, style = MaterialTheme.typography.titleMedium) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Metric("Принтеров", printers.size.toString()); Metric("Печатают", printers.count { it.status == "printing" }.toString()); Metric("Внимание", printers.count { it.attention }.toString())
+            Metric("Принтеров", printers.size.toString()); Metric("Печатают", printers.count { it.enabled && it.status == "printing" }.toString()); Metric("Внимание", printers.count { it.attention }.toString())
         } }
         if (printers.any { it.status == "finished" }) item { Text("Изделие готово к снятию", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
         if (printers.isEmpty()) item { Text("Принтеров пока нет. Добавьте их в Studio3D или обновите соединение.") }
@@ -281,12 +281,13 @@ class StudioModel(app: Application) : AndroidViewModel(app) {
             Icon(if (printer.status == "offline") Icons.Outlined.WifiOff else Icons.Outlined.Print, null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(printer.name, fontWeight = FontWeight.Bold)
-                Text(printer.label + if (printer.status == "printing") " · ${printer.percent} %" else "", fontSize = 13.sp)
-                if (printer.status in listOf("printing", "paused")) {
+                Text(if (!printer.enabled) "Опрос выключен" else printer.label + if (printer.status == "printing") " · ${printer.percent} %" else "", fontSize = 13.sp)
+                if (printer.enabled && printer.status in listOf("printing", "paused")) {
                     LinearProgressIndicator(progress = { printer.percent / 100f }, modifier = Modifier.fillMaxWidth())
                     Text("Осталось: ${duration(printer.remaining)}", fontSize = 12.sp)
                 }
                 if (printer.faults.isNotEmpty()) Text(printer.faults.first(), fontSize = 12.sp, color = MaterialTheme.colorScheme.error, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (printer.heatingIdle.isNotEmpty()) Text("Нагрев без печати", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
             Icon(Icons.Outlined.ChevronRight, null)
         }
@@ -355,6 +356,7 @@ class StudioModel(app: Application) : AndroidViewModel(app) {
             item { Text("Нить: ${when (p.filament) { true -> "есть"; false -> "нет"; null -> "нет данных" }}") }
             if (p.temperatures.isNotBlank()) item { Text(p.temperatures) }
             items(p.faults) { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (p.heatingIdle.isNotEmpty()) item { Text("Нагрев без печати: ${p.heatingIdle.joinToString()}", color = MaterialTheme.colorScheme.error) }
             item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Metric("Печать, ч", "%.1f".format(p.printHours)); Metric("Включён, ч", "%.1f".format(p.onHours)) } }
             if (p.canLight) item { Button(onClick = { model.light(p) }, enabled = !model.busy && !model.stale && !model.demo, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Lightbulb, null); Spacer(Modifier.width(8.dp)); Text(if (p.light == true) "Выключить свет" else "Включить свет") } }
             item { Text("Данные принтера: ${if (p.updated > 0) formatTime(Instant.ofEpochSecond(p.updated.toLong()).toString()) else "Нет ответа"}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
