@@ -88,6 +88,35 @@ def test_k1c_profile():
     assert k1c.page_url_for("10.0.0.7") == "http://10.0.0.7:8000"
 
 
+@pytest.mark.django_db
+def test_k1_camera_on_dashboard_and_detail(client, monkeypatch):
+    make_user("camera_operator", ROLE_OPERATOR)
+    p = make_printer(profile_id="creality_k1", host="10.0.0.7", port=9999)
+    login(client, "camera_operator")
+    profile = p.profile
+    assert profile.camera_type == "mjpeg_snapshot"
+    assert profile.snapshot_url_for(p.host) == "http://10.0.0.7:8080/?action=snapshot"
+    snapshot_url = reverse("printer_snapshot", args=[p.pk])
+    for page in (reverse("dashboard"), reverse("printer_detail", args=[p.pk])):
+        html = client.get(page).content.decode()
+        assert f'src="{snapshot_url}"' in html
+        assert "Камеры нет" not in html
+
+    calls = []
+
+    def snapshot(url, timeout):
+        calls.append(url)
+        return b"\xff\xd8camera-frame\xff\xd9"
+
+    monkeypatch.setattr("printers.views.fetch_snapshot", snapshot)
+    response = client.get(snapshot_url)
+    assert response.status_code == 200
+    assert response["Content-Type"] == "image/jpeg"
+    assert response["Cache-Control"] == "no-store"
+    assert response.content == b"\xff\xd8camera-frame\xff\xd9"
+    assert calls == [profile.snapshot_url_for(p.host)]
+
+
 def test_k1c_set_light_uses_native_protocol(monkeypatch):
     calls = []
     monkeypatch.setattr(

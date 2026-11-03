@@ -19,7 +19,9 @@ power_w: null
 build_volume_mm: [220, 220, 250]
 
 camera:
-  type: none
+  # Проверено на реальном K1 2026-11-03: MJPEG-Streamer, JPEG 1280×720.
+  type: mjpeg_snapshot
+  snapshot_url: "http://{host}:8080/?action=snapshot"
 
 capabilities: [pause, resume, cancel, light, start_file, upload, delete_file, rename_file]
 
