@@ -169,6 +169,8 @@ def printer_keyboard(item):
 
 def pending_deliveries():
     config = TelegramSettings.load()
+    if not config.bot_started:
+        return []
     query = TelegramDelivery.objects.filter(sent_at=None, skipped=False, next_attempt_at__lte=timezone.now())
     if not config.enabled:
         query = query.filter(event__kind="test")
@@ -185,6 +187,8 @@ def delivery_access(delivery):
     recipient = TelegramRecipient.objects.select_related("user").get(pk=delivery.recipient_id)
     event = delivery.event
     config = TelegramSettings.load()
+    if not config.bot_started:
+        return None
     now = timezone.now()
     valid = can_receive(recipient) and bool(recipient.chat_id)
     valid = valid and allowed_printers(recipient).filter(pk=event.printer_id).exists()

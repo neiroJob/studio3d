@@ -24,7 +24,7 @@ ACTIVE = (base.PRINTING, base.PAUSED)
 
 
 def enqueue(config, printer, kind, title, snapshot, key, priority=10):
-    if not config.enabled:
+    if not config.enabled or not config.bot_started:
         return
     event, created = TelegramEvent.objects.get_or_create(
         key=hashlib.sha256(key.encode()).hexdigest(),
@@ -97,6 +97,7 @@ def record_state(printer_id, raw):
             row.offline_since = now
         if (
             config.enabled
+            and config.bot_started
             and not row.offline_notified
             and config.notify_connection
             and now - row.offline_since >= timedelta(minutes=config.offline_minutes)

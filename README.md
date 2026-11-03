@@ -47,8 +47,8 @@ Private chats, groups, printer scope, events and intervals are configured under 
 Commands provide status/remaining time, photos, recent history and machine hours. The only printer control is light on/off.
 
 1. Open the official [@BotFather](https://t.me/BotFather), send `/newbot`, choose a name and a unique username ending in `bot`.
-2. Put its token in the server's `.env`: `TELEGRAM_BOT_TOKEN=your_token`. Never commit it or share it in chat.
-3. Run `bash update.sh` from the server repository on `dev`; check `docker compose logs --tail=50 bot`.
+2. Enter the token under **Administration → Telegram**, save settings and click **Start bot**. The token is stored encrypted and never displayed again. Replace/remove it here; an empty field keeps the existing token.
+3. Install this version once with `bash update.sh` on `dev`. After installation, token changes and Start/Stop work from the admin UI without terminal commands or container restarts. The background bot service must remain running.
    No inbound port or public webhook is required. Use a dedicated bot; existing webhooks are not removed automatically.
 4. Add a recipient in Administration → Telegram. For a private chat select an active project user with dashboard access;
    for a group choose the group type. Select printers or leave the selection empty for all printers.

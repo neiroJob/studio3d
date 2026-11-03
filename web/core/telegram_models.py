@@ -4,8 +4,13 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator
 from django.db import models
 
+from .crypto import decrypt
+
 
 class TelegramSettings(models.Model):
+    token_encrypted = models.TextField(blank=True, default="")
+    bot_started = models.BooleanField(default=False)
+
     class Destination(models.TextChoices):
         PRIVATE = "private", "Личные чаты"
         GROUP = "group", "Группы"
@@ -47,6 +52,10 @@ class TelegramSettings(models.Model):
     def save(self, *args, **kwargs):
         self.pk = 1
         return super().save(*args, **kwargs)
+
+    @property
+    def token(self):
+        return decrypt(self.token_encrypted)
 
     @classmethod
     def load(cls):

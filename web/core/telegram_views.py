@@ -1,11 +1,11 @@
 import uuid
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
 
 from accounts.roles import right_required
@@ -25,11 +25,17 @@ from .telegram_models import (
 
 
 @right_required("integrations_manage")
+@never_cache
+@sensitive_post_parameters("token")
 def manage(request):
     config = TelegramSettings.load()
     form = TelegramSettingsForm(request.POST or None, instance=config)
     if request.method == "POST" and form.is_valid():
+        previous_token = config.token
         config = form.save()
+        if previous_token != config.token:
+            TelegramRuntime.load()
+            TelegramRuntime.objects.filter(pk=1).update(bot_username="", last_error="")
         if not config.enabled:
             TelegramDelivery.objects.filter(sent_at=None, skipped=False).update(
                 skipped=True,
@@ -48,13 +54,30 @@ def manage(request):
             "worker_alive": bool(
                 runtime.heartbeat and timezone.now() - runtime.heartbeat < timedelta(seconds=90)
             ),
-            "token_configured": bool(settings.TELEGRAM_BOT_TOKEN),
+            "token_configured": bool(config.token),
+            "bot_started": config.bot_started,
             "recipients": TelegramRecipient.objects.select_related("user").prefetch_related("printers"),
             "deliveries": TelegramDelivery.objects.select_related("recipient", "event__printer").order_by(
                 "-pk"
             )[:30],
         },
     )
+
+
+@right_required("integrations_manage")
+@require_POST
+def lifecycle(request, action):
+    config = TelegramSettings.load()
+    if action not in ("start", "stop"):
+        messages.error(request, "Неизвестное действие.")
+    elif action == "start" and not config.token:
+        messages.error(request, "Сначала сохраните токен BotFather ниже.")
+    else:
+        config.bot_started = action == "start"
+        config.save(update_fields=["bot_started"])
+        audit.log(request, audit.Action.SETTINGS, target="Telegram: " + action)
+        messages.success(request, "Бот запускается." if config.bot_started else "Бот останавливается.")
+    return redirect("telegram_settings")
 
 
 @right_required("integrations_manage")
@@ -115,6 +138,9 @@ def unlink(request, pk):
 @right_required("integrations_manage")
 @require_POST
 def test_recipient(request, pk):
+    if not TelegramSettings.load().bot_started:
+        messages.error(request, "Сначала нажмите «Запустить бота».")
+        return redirect("telegram_settings")
     recipient = get_object_or_404(TelegramRecipient.objects.select_related("user"), pk=pk)
     printer = allowed_printers(recipient).first()
     if not can_receive(recipient) or not recipient.chat_id or printer is None:

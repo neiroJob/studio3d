@@ -5,24 +5,34 @@ import uuid
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.types import BotCommand
-from django.conf import settings
 from django.core.cache import cache
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from core.telegram_bot import TelegramService, database
-from core.telegram_models import TelegramRuntime
+from core.telegram_models import TelegramRuntime, TelegramSettings
 
 log = logging.getLogger(__name__)
 LOCK = "telegram:worker:lock"
 
 
-async def heartbeat(owner):
+class TokenChanged(Exception):
+    pass
+
+
+def configured_token():
+    config = TelegramSettings.load()
+    return config.token if config.bot_started else ""
+
+
+async def heartbeat(owner, token):
     while True:
         if await database(cache.get, LOCK) != owner:
             raise RuntimeError("Telegram worker lock lost")
         await database(cache.touch, LOCK, 60)
         await database(TelegramRuntime.objects.filter(pk=1).update, heartbeat=timezone.now())
+        if await database(configured_token) != token:
+            raise TokenChanged
         await asyncio.sleep(5)
 
 
@@ -32,28 +42,29 @@ async def run_bot():
         log.warning("Другой сервис Telegram уже запущен")
         return
     await database(TelegramRuntime.load)
-    beat = asyncio.create_task(heartbeat(owner))
+    token = await database(configured_token)
+    beat = asyncio.create_task(heartbeat(owner, token))
     bot = None
     tasks = []
     try:
-        while not settings.TELEGRAM_BOT_TOKEN:
+        while not token:
             await database(
                 TelegramRuntime.objects.filter(pk=1).update,
-                last_error="Укажите TELEGRAM_BOT_TOKEN в .env и пересоздайте контейнер bot.",
+                last_error="Бот остановлен. Сохраните токен и нажмите «Запустить бота» в админке Telegram.",
             )
             await setup_wait(beat, 20)
         try:
-            bot = Bot(settings.TELEGRAM_BOT_TOKEN, session=AiohttpSession(timeout=45))
+            bot = Bot(token, session=AiohttpSession(timeout=45))
         except Exception:
             await database(
                 TelegramRuntime.objects.filter(pk=1).update,
-                last_error="Некорректный формат токена. Проверьте .env и перезапустите bot.",
+                last_error="Некорректный формат токена. Замените его в админке Telegram.",
             )
             return
         while True:
             try:
-                me = await bot.get_me()
-                webhook = await bot.get_webhook_info()
+                me = await guarded_call(beat, bot.get_me())
+                webhook = await guarded_call(beat, bot.get_webhook_info())
                 if webhook.url:
                     await database(
                         TelegramRuntime.objects.filter(pk=1).update,
@@ -85,8 +96,11 @@ async def run_bot():
             ("unmute", "Включить мои уведомления"),
             ("help", "Помощь и команды"),
         ]
-        await bot.set_my_commands(
-            [BotCommand(command=command, description=text) for command, text in commands]
+        await guarded_call(
+            beat,
+            bot.set_my_commands(
+                [BotCommand(command=command, description=text) for command, text in commands]
+            ),
         )
         service = TelegramService(bot)
         service.username = me.username or ""
@@ -110,11 +124,29 @@ async def setup_wait(beat, seconds):
         task.result()
 
 
+async def guarded_call(beat, awaitable):
+    request = asyncio.ensure_future(awaitable)
+    try:
+        done, _ = await asyncio.wait({beat, request}, return_when=asyncio.FIRST_COMPLETED)
+        if beat in done:
+            beat.result()
+        return request.result()
+    finally:
+        if not request.done():
+            request.cancel()
+        await asyncio.gather(request, return_exceptions=True)
+
+
 class Command(BaseCommand):
     help = "Telegram-бот оператора: запросы, фото, события и только управление светом"
 
     def handle(self, *args, **options):
         try:
-            asyncio.run(run_bot())
+            while True:
+                try:
+                    asyncio.run(run_bot())
+                    break
+                except TokenChanged:
+                    continue
         except KeyboardInterrupt:
             pass

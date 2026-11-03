@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("healthz", views.healthz, name="healthz"),
     path("integrations/telegram/", telegram_views.manage, name="telegram_settings"),
+    path("integrations/telegram/bot/<str:action>/", telegram_views.lifecycle, name="telegram_lifecycle"),
     path(
         "integrations/telegram/recipients/add/", telegram_views.recipient_edit, name="telegram_recipient_add"
     ),

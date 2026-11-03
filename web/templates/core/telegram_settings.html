@@ -3,15 +3,18 @@
 {% block content %}
 <div class="panel">
   <h2>Подключение бота</h2>
-  <p>Токен: <b>{% if token_configured %}задан в окружении сервера{% else %}не задан{% endif %}</b>.
+  <p>Токен: <b>{% if token_configured %}сохранён зашифрованным{% else %}не задан{% endif %}</b>.
     Сервис: <b>{% if worker_alive %}работает{% else %}нет свежего ответа{% endif %}</b>.
     {% if runtime.bot_username %}Бот: <a href="https://t.me/{{ runtime.bot_username }}" target="_blank" rel="noopener">@{{ runtime.bot_username }}</a>.{% endif %}</p>
   {% if runtime.last_error %}<p class="msg error">{{ runtime.last_error }}</p>{% endif %}
+  <p>Бот: <b>{% if bot_started %}запуск разрешён{% else %}остановлен{% endif %}</b>. Изменения применяются в течение 5 секунд, если сервис работает.</p>
+  <form method="post" action="{% url 'telegram_lifecycle' 'start' %}" class="inline">{% csrf_token %}<button class="btn pri">Запустить бота</button></form>
+  <form method="post" action="{% url 'telegram_lifecycle' 'stop' %}" class="inline">{% csrf_token %}<button class="btn">Остановить бота</button></form>
   <details><summary>Как создать и подключить бота — по шагам</summary>
     <ol>
       <li>Откройте в Telegram официальный <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте <code>/newbot</code>. Задайте название и уникальное имя, оканчивающееся на <code>bot</code>.</li>
-      <li>Скопируйте токен BotFather в файл <code>.env</code> на сервере: <code>TELEGRAM_BOT_TOKEN=ваш_токен</code>. Не публикуйте токен, не отправляйте его оператору и не коммитьте в Git.</li>
-      <li>Из папки проекта на сервере выполните <code>bash update.sh</code>. Проверьте <code>docker compose logs --tail=50 bot</code>. Порт для бота открывать не нужно: он сам подключается к Telegram.</li>
+      <li>Введите токен BotFather в поле «Токен бота» ниже и сохраните настройки. Затем нажмите «Запустить бота». Токен хранится зашифрованным и не показывается повторно. Пустое поле при сохранении оставляет прежний токен.</li>
+      <li>Сервис бота устанавливается при обновлении проекта. После установки запуск, остановка и замена токена выполняются здесь, без терминала. Если нет свежего ответа сервиса, проверьте установку на сервере. Порт для бота открывать не нужно.</li>
       <li>Нажмите «Добавить получателя». Для личного чата выберите пользователя проекта; для группы — тип «Группа операторов». Выберите принтеры или оставьте выбор пустым для всех.</li>
       <li>Создайте одноразовый код. Для личного чата сотрудник открывает ссылку и нажимает «Запустить». Для группы добавьте бота и отправьте в ней <code>/pair КОД</code>. Код действует 10 минут и используется один раз.</li>
       <li>Нажмите «Тест» возле привязанного чата. Затем включите уведомления и выберите получателей и интервал ниже.</li>

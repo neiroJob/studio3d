@@ -19,6 +19,7 @@ from django.utils import timezone
 from PIL import Image
 
 from accounts.roles import ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR
+from core.crypto import encrypt
 from core.telegram_access import chat_access, issue_pairing, light_access, pair_chat
 from core.telegram_bot import TelegramService, control_light, delivery_access, delivery_done
 from core.telegram_events import record_finished, record_state
@@ -62,6 +63,7 @@ def setup_bot(db):
     recipient = TelegramRecipient.objects.create(name="Operator", kind="private", user=user, chat_id=123)
     config = TelegramSettings.load()
     config.enabled = True
+    config.bot_started = True
     config.save()
     return user, printer, recipient, config
 
@@ -247,7 +249,7 @@ def test_admin_ui_permissions_and_interval_validation(setup_bot, client):
     response = client.get(reverse("telegram_settings"))
     assert response.status_code == 200
     assert "BotFather" in response.content.decode()
-    assert "TELEGRAM_BOT_TOKEN" in response.content.decode()
+    assert "Запустить бота" in response.content.decode()
     assert client.get(reverse("telegram_recipient_add")).status_code == 200
     form = TelegramSettingsForm(
         {"destination": "both", "interval_minutes": -1, "reminder_minutes": 0, "offline_minutes": 0},
@@ -368,6 +370,131 @@ def test_runtime_offset_is_durable(db):
     runtime.update_offset = 654
     runtime.save()
     assert TelegramRuntime.load().update_offset == 654
+
+
+FAKE_TOKEN = "123456:" + "A" * 35  # Synthetic value, never a real bot credential.
+
+
+def settings_data(**extra):
+    return {
+        "destination": "both",
+        "interval_minutes": 10,
+        "reminder_minutes": 30,
+        "offline_minutes": 1,
+        "enabled": "on",
+        **extra,
+    }
+
+
+def test_admin_token_encryption_preserve_replace_remove(setup_bot, client):
+    user, _, _, _ = setup_bot
+    user.groups.set(Group.objects.filter(name=ROLE_ADMIN))
+    client.force_login(user)
+    url = reverse("telegram_settings")
+    assert client.post(url, settings_data(token=FAKE_TOKEN)).status_code == 302
+    config = TelegramSettings.load()
+    assert config.token == FAKE_TOKEN
+    assert FAKE_TOKEN not in config.token_encrypted
+    response = client.get(url)
+    assert FAKE_TOKEN not in response.content.decode()
+    assert config.token_encrypted not in response.content.decode()
+    assert "no-store" in response.headers["Cache-Control"]
+    client.post(url, settings_data(token=""))
+    assert TelegramSettings.load().token == FAKE_TOKEN
+    other = "654321:" + "B" * 35
+    client.post(url, settings_data(token=other))
+    assert TelegramSettings.load().token == other
+    client.post(url, settings_data(remove_token="on"))
+    config = TelegramSettings.load()
+    assert config.token == "" and not config.bot_started
+    from core.models import AuditLog
+
+    assert FAKE_TOKEN not in str(list(AuditLog.objects.values()))
+    assert other not in str(list(AuditLog.objects.values()))
+
+
+def test_invalid_token_not_echoed_or_saved(setup_bot, client):
+    user, _, _, _ = setup_bot
+    user.groups.set(Group.objects.filter(name=ROLE_ADMIN))
+    client.force_login(user)
+    response = client.post(reverse("telegram_settings"), settings_data(token="bad-secret-value"))
+    assert response.status_code == 200
+    assert "bad-secret-value" not in response.content.decode()
+    assert not TelegramSettings.load().token_encrypted
+    form = TelegramSettingsForm(settings_data(token=FAKE_TOKEN, remove_token="on"))
+    assert not form.is_valid()
+
+
+def test_lifecycle_requires_admin_token_and_post(setup_bot, client):
+    user, _, _, config = setup_bot
+    start = reverse("telegram_lifecycle", args=["start"])
+    stop = reverse("telegram_lifecycle", args=["stop"])
+    client.force_login(user)
+    assert client.post(start).status_code == 403
+    user.groups.set(Group.objects.filter(name=ROLE_ADMIN))
+    assert client.get(start).status_code == 405
+    client.post(stop)
+    client.post(start)
+    assert not TelegramSettings.load().bot_started
+    config.token_encrypted = encrypt(FAKE_TOKEN)
+    config.bot_started = False
+    config.save()
+    client.post(start)
+    assert TelegramSettings.load().bot_started
+    client.post(stop)
+    assert not TelegramSettings.load().bot_started
+
+
+def test_stopped_bot_does_not_enqueue_or_deliver(setup_bot):
+    from core.telegram_bot import pending_deliveries
+
+    _, printer, _, config = setup_bot
+    record_state(printer.pk, state())
+    delivery = TelegramDelivery.objects.get()
+    config.bot_started = False
+    config.save()
+    assert delivery_access(delivery) is None
+    assert pending_deliveries() == []
+    record_state(printer.pk, state(base.PAUSED))
+    assert TelegramEvent.objects.count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("started", [True, False])
+def test_worker_detects_token_change_and_stop(setup_bot, started):
+    from core.management.commands.run_telegram import LOCK, TokenChanged, heartbeat
+
+    _, _, _, config = setup_bot
+    config.token_encrypted = encrypt(FAKE_TOKEN)
+    config.bot_started = started
+    config.save()
+    cache.set(LOCK, "worker-owner", 60)
+    with pytest.raises(TokenChanged):
+        async_to_sync(heartbeat)("worker-owner", "previous-token")
+
+
+def test_token_change_cancels_inflight_connection():
+    from core.management.commands.run_telegram import TokenChanged, guarded_call
+
+    cancelled = []
+
+    async def check():
+        async def changed():
+            await asyncio.sleep(0)
+            raise TokenChanged
+
+        async def connection():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+        beat = asyncio.create_task(changed())
+        with pytest.raises(TokenChanged):
+            await guarded_call(beat, connection())
+
+    asyncio.run(check())
+    assert cancelled == [True]
 
 
 def test_history_survives_notification_failure(setup_bot):
