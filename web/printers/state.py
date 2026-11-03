@@ -46,7 +46,11 @@ def _persist_faults(printer_id, state):
         )
     )
     message = str(state.get("message") or "").strip()
-    if state.get("status") == base.ERROR and base.show_fault_on_dashboard(message) and message not in messages:
+    if (
+        state.get("status") == base.ERROR
+        and base.show_fault_on_dashboard(message)
+        and message not in messages
+    ):
         messages.append(message)
 
     try:
@@ -84,10 +88,17 @@ def read_states(printer_ids):
 def view_state(printer, state=None):
     """Состояние для шаблонов: единая модель + признаки из БД («ждёт снятия»)."""
     state = dict(state or base.offline_state())
-    pending = list(printer.fault_events.filter(acknowledged_at__isnull=True).values_list("message", flat=True))
-    acknowledged_active = set(
-        printer.fault_events.filter(acknowledged_at__isnull=False, active=True).values_list("message", flat=True)
-    )
+    pending = []
+    acknowledged_active = set()
+    if printer.pk is not None:
+        pending = list(
+            printer.fault_events.filter(acknowledged_at__isnull=True).values_list("message", flat=True)
+        )
+        acknowledged_active = set(
+            printer.fault_events.filter(acknowledged_at__isnull=False, active=True).values_list(
+                "message", flat=True
+            )
+        )
     current = [
         str(item)
         for item in state.get("faults") or []
@@ -111,7 +122,7 @@ def view_state(printer, state=None):
     names = {"nozzle": "сопло", "bed": "стол", "chamber": "камера"}
     temps = state.get("temps") or {}
     state["heating_idle"] = []
-    if status not in (base.PRINTING, base.PAUSED, base.OFFLINE):
+    if status not in (base.PRINTING, base.PAUSED, base.OFFLINE, base.SELF_TEST):
         state["heating_idle"] = [
             f"{names[k]} {round(v[1])} °C"
             for k, v in temps.items()

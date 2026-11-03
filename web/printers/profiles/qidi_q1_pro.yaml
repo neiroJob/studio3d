@@ -18,9 +18,13 @@ build_volume_mm: [245, 258, 248]
 # Объекты Klipper, которые у разных моделей называются по-разному.
 objects:
   chamber: "heater_generic chamber"
-  # Датчик обрыва нити — найден в записи простоя 2026-10-27 (moonraker_dump.py), был выключен
-  # (enabled: false), на реальном обрыве нити не проверялся. ❓
-  filament_sensor: "filament_switch_sensor fila"
+  # Hall меняет показания при физическом извлечении/вставке нити (2026-11-03).
+  filament_sensor: "hall_filament_width_sensor"
+
+# Порог min_diameter из конфигурации реального Q1 Pro и штатной конфигурации QIDI.
+# Проверка 2026-11-03: при извлечении/вставке нити меняется Hall, а fila остаётся true.
+filament:
+  runout_diameter: 0.3
 
 camera:
   type: mjpeg_snapshot

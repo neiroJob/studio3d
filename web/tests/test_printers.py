@@ -17,7 +17,7 @@ from core.models import AuditLog
 from printers import collector
 from printers.drivers import base
 from printers.drivers.moonraker import MoonrakerClient, MoonrakerMonitor, job_from_history, normalize
-from printers.models import Printer, PrinterFault, PrintJob
+from printers.models import Printer, PrintJob
 from printers.profiles import get_profile
 from printers.state import read_state, view_state, write_state
 
@@ -182,23 +182,23 @@ def test_normalize_states():
 
 
 def test_normalize_warns_on_filament_sensor_runout():
-    """Датчик обрыва нити (profile.objects.filament_sensor, Q1 Pro — filament_switch_sensor fila):
-    принтер может считать, что печатает, хотя пластик на самом деле не подаётся."""
+    """Дискретный датчик: предупреждение включено только при активной реакции датчика."""
+    profile = get_profile("qidi_plus_4")
     st = {
         "webhooks": {"state": "ready"},
         "print_stats": {"state": "printing", "filename": "a.gcode"},
         "filament_switch_sensor fila": {"enabled": True, "filament_detected": False},
     }
-    printing = normalize(st, profile=Q1)
+    printing = normalize(st, profile=profile)
     assert printing["status"] == base.PRINTING and "датчик нити" in printing["message"].lower()
     assert printing["filament"] == {"present": False, "enabled": True}
 
     # датчик выключен или нить есть — предупреждения нет
     st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": False}
-    assert normalize(st, profile=Q1)["message"] == ""
+    assert normalize(st, profile=profile)["message"] == ""
     st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": True}
-    assert normalize(st, profile=Q1)["message"] == ""
-    assert normalize(st, profile=Q1)["filament"] == {"present": True, "enabled": True}
+    assert normalize(st, profile=profile)["message"] == ""
+    assert normalize(st, profile=profile)["filament"] == {"present": True, "enabled": True}
 
     plus4 = get_profile("qidi_plus_4")
     st["print_stats"] = {"state": "standby"}
@@ -208,7 +208,77 @@ def test_normalize_warns_on_filament_sensor_runout():
     # не печатает — датчик не проверяется
     st["print_stats"] = {"state": "standby"}
     st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": False}
-    assert normalize(st, profile=Q1)["message"] == ""
+    assert normalize(st, profile=profile)["message"] == ""
+
+
+def sensor_reading(profile, present):
+    if profile.filament_runout_diameter is not None:
+        return {"is_active": True, "Diameter": 0.88 if present else -0.56}
+    return {"enabled": True, "filament_detected": present}
+
+
+@pytest.mark.parametrize("diameter, present", [(-0.56, False), (0.3, False), (0.88, True), (None, None), (float("nan"), None)])
+def test_q1_hall_uses_verified_threshold(diameter, present):
+    state = normalize(
+        {
+            "print_stats": {"state": "paused"},
+            "hall_filament_width_sensor": {"Diameter": diameter, "is_active": False},
+            "filament_switch_sensor fila": {"enabled": True, "filament_detected": True},
+        },
+        profile=Q1,
+    )
+    assert Q1.filament_runout_diameter == 0.3
+    assert state["filament"] == {"present": present, "enabled": False}
+    assert bool(state["message"]) == (present is False)
+
+
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "creality_k1c", "qidi_plus_4"])
+@pytest.mark.parametrize("print_state", ["printing", "paused"])
+def test_all_moonraker_profiles_report_missing_filament(profile_id, print_state):
+    from printers.drivers.moonraker import subscribe_objects
+
+    profile = get_profile(profile_id)
+    sensor = profile.objects["filament_sensor"]
+    expected_fields = ["Diameter", "is_active"] if profile.filament_runout_diameter is not None else ["filament_detected", "enabled"]
+    assert subscribe_objects(profile)[sensor] == expected_fields
+    st = {
+        "webhooks": {"state": "ready"},
+        "print_stats": {"state": print_state, "filename": "part.gcode"},
+        sensor: sensor_reading(profile, False),
+    }
+    state = normalize(st, profile=profile)
+    assert state["filament"] == {"present": False, "enabled": True}
+    assert "нет нити в датчике" in state["message"]
+    assert state["message"] in state["faults"]
+    st[sensor] = sensor_reading(profile, True)
+    assert normalize(st, profile=profile)["message"] == ""
+    del st[sensor]
+    assert normalize(st, profile=profile)["filament"]["present"] is None
+    assert normalize(st, profile=profile)["message"] == ""
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "creality_k1c", "qidi_plus_4"])
+def test_filament_runout_reaches_dashboard_and_detail(client, profile_id):
+    make_user("runout_operator", ROLE_OPERATOR)
+    printer = make_printer(profile_id=profile_id)
+    profile = printer.profile
+    sensor = profile.objects["filament_sensor"]
+    state = normalize(
+        {
+            "webhooks": {"state": "ready"},
+            "print_stats": {"state": "paused", "filename": "part.gcode"},
+            sensor: sensor_reading(profile, False),
+        },
+        profile=profile,
+    )
+    write_state(printer.pk, state)
+    login(client, "runout_operator")
+    dashboard = client.get(reverse("dashboard"))
+    assert printer.pk in [item["printer"].pk for item in dashboard.context["attention"]]
+    assert "нет нити в датчике" in dashboard.content.decode()
+    assert "нет нити в датчике" in client.get(reverse("printer_detail", args=[printer.pk])).content.decode()
+    assert printer.fault_events.filter(message=state["message"], acknowledged_at=None).exists()
 
 
 def test_job_from_history_grams():
@@ -240,6 +310,12 @@ def test_view_state_awaiting_removal():
 
 
 # --- HTTP-клиент ------------------------------------------------------------------------------
+
+
+def test_self_test_heating_is_expected():
+    printer = Printer(name="K1", profile_id="creality_k1", host="h", port=9999)
+    state = view_state(printer, {"status": base.SELF_TEST, "temps": {"nozzle": [140, 140], "bed": [40, 90]}})
+    assert state["heating_idle"] == []
 
 
 def test_client_check_and_commands(fake):
@@ -318,8 +394,15 @@ def test_query_encodes_object_names(fake):
     assert ("query", "heater_generic%20chamber=temperature") in fake.calls
 
 
-def test_client_no_connection():
-    with pytest.raises(base.DriverError, match="Нет связи"):
+@pytest.mark.parametrize("error, message", [("ConnectionError", "Нет связи"), ("Timeout", "не ответил вовремя")])
+def test_client_no_connection(monkeypatch, error, message):
+    import requests
+
+    def unavailable(*args, **kwargs):
+        raise getattr(requests, error)("test connection failure")
+
+    monkeypatch.setattr("printers.drivers.moonraker.requests.request", unavailable)
+    with pytest.raises(base.DriverError, match=message):
         MoonrakerClient("127.0.0.1", 1, profile=Q1, timeout=1).check()
 
 
@@ -534,7 +617,7 @@ def test_k1_ready_transition_recovers_completed_job():
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "creality_k1c"])
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "creality_k1c", "qidi_plus_4"])
 def test_full_print_cycle_sets_awaiting_removal_and_history_moonraker(profile_id):
     """Полный цикл «печать идёт → завершилась» через настоящий PrinterWorker (не только через
     on_job напрямую) должен писать в историю и выставлять «ждёт снятия» — для обоих профилей
@@ -587,6 +670,9 @@ def test_full_print_cycle_sets_awaiting_removal_and_history_moonraker(profile_id
     assert printer.awaiting_removal is True
     job = PrintJob.objects.get(printer=printer, external_id="FULLCYCLE1")
     assert job.status == "completed"
+    assert printer.jobs.count() == 1
+    assert printer.print_seconds == 600
+    assert view_state(printer, {"status": base.READY, "temps": {}})["status"] == base.FINISHED
 
 
 # --- веб: права, добавление, команды ----------------------------------------------------------

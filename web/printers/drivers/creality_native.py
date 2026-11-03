@@ -130,11 +130,17 @@ def normalize(data, profile=None, connected=True, now=None):
         }
 
     light = _float(data.get("lightSw"), 0) > 0 if "lightSw" in data else None
+    # Родной веб-интерфейс K1 показывает «Consumable not detected» при materialStatus != 0.
+    # Нулевой флаг означает отсутствие предупреждения, а не доказанное наличие нити.
+    missing_filament = _float(data.get("materialStatus")) != 0
+    if missing_filament:
+        warning = "Датчик нити: нет нити в датчике — проверьте подачу пластика."
+        message = f"{message} {warning}".strip()
     return {
         "status": status,
         "message": message,
-        "faults": [message] if status == base.ERROR and message else [],
-        "filament": {"present": None, "enabled": None},
+        "faults": [message] if message and (status == base.ERROR or missing_filament) else [],
+        "filament": {"present": False if missing_filament else None, "enabled": None},
         "temps": temps,
         "job": job,
         "light": light,
@@ -441,6 +447,13 @@ class CrealityNativeMonitor(base.BaseMonitor):
         self._job["last_filament_mm"] = max(self._job.get("last_filament_mm", 0.0), filament_mm)
 
     async def _track_job(self, state, on_job):
+        # Самопроверка временно скрывает job, но не отменяет активную печать.
+        if (
+            state.get("status") == base.SELF_TEST
+            and self._job is not None
+            and self.data.get("printFileName") == self._job["filename"]
+        ):
+            return
         job = state.get("job")
         if job and job["filename"]:
             key = f"{job['filename']}@{round(self.data.get('printStartTime') or 0)}"

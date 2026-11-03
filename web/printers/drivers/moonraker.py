@@ -9,6 +9,7 @@ import asyncio
 import collections
 import itertools
 import json
+import math
 import re
 import time
 import urllib.parse
@@ -44,7 +45,11 @@ def subscribe_objects(profile):
         objects[profile.light_object] = ["value"]
     filament_sensor = (profile.objects.get("filament_sensor") if profile else None) or ""
     if filament_sensor:
-        objects[filament_sensor] = ["filament_detected", "enabled"]
+        objects[filament_sensor] = (
+            ["Diameter", "is_active"]
+            if profile.filament_runout_diameter is not None
+            else ["filament_detected", "enabled"]
+        )
     return objects
 
 
@@ -158,9 +163,22 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
         "present": detected if isinstance(detected, bool) else None,
         "enabled": sensor.get("enabled") if isinstance(sensor.get("enabled"), bool) else None,
     }
+    width_sensor = profile is not None and profile.filament_runout_diameter is not None
+    if width_sensor:
+        diameter = sensor.get("Diameter")
+        valid = (
+            isinstance(diameter, (int, float))
+            and not isinstance(diameter, bool)
+            and math.isfinite(diameter)
+        )
+        filament = {
+            "present": diameter > profile.filament_runout_diameter if valid else None,
+            "enabled": sensor.get("is_active") if isinstance(sensor.get("is_active"), bool) else None,
+        }
     if filament_name and result in (base.PRINTING, base.PAUSED):
-        if filament["enabled"] and filament["present"] is False:
-            warning = "Датчик нити: пластик не подаётся (обрыв, конец прутка или застрял)."
+        # Hall продолжает измерять после отключения автопаузы макросом PAUSE.
+        if (filament["enabled"] or width_sensor) and filament["present"] is False:
+            warning = "Датчик нити: нет нити в датчике — проверьте подачу пластика."
             message = f"{message} {warning}".strip() if message else warning
 
     return {
@@ -491,7 +509,8 @@ def _is_fault_response(line):
     return bool(
         re.match(r"^!{1,2}\s", line, re.IGNORECASE)
         or re.search(
-            r"\b(?:error|failed|failure|fault|shutdown|lost communication|communication timeout|timeout|cannot be run)\b",
+            r"\b(?:error|failed|failure|fault|shutdown|lost communication|"
+            r"communication timeout|timeout|cannot be run)\b",
             line,
             re.IGNORECASE,
         )
@@ -505,7 +524,11 @@ def decorate(state, console, fault_messages=None):
     faults = [fault for fault in state.get("faults") or [] if base.show_fault_on_dashboard(fault)]
     candidates = lines if fault_messages is None else fault_messages
     for line in candidates:
-        if line and base.show_fault_on_dashboard(line) and (fault_messages is not None or _is_fault_response(line)):
+        if (
+            line
+            and base.show_fault_on_dashboard(line)
+            and (fault_messages is not None or _is_fault_response(line))
+        ):
             if line not in faults:
                 faults.append(line)
     state["faults"] = faults

@@ -295,6 +295,50 @@ def test_monitor_tracks_job_completion():
     assert jobs == [("completed", True, 1400.0)]
 
 
+def test_native_material_warning_does_not_guess_presence():
+    data = {"state": 1, "printFileName": "part.gcode", "printProgress": 30, "materialStatus": 1}
+    state = normalize(data, K1)
+    assert state["status"] == base.PRINTING
+    assert state["filament"] == {"present": False, "enabled": None}
+    assert "нет нити в датчике" in state["message"]
+    assert state["message"] in state["faults"]
+    data["materialStatus"] = 0
+    assert normalize(data, K1)["filament"]["present"] is None
+    assert normalize(data, K1)["message"] == ""
+    del data["materialStatus"]
+    assert normalize(data, K1)["filament"]["present"] is None
+
+
+def test_monitor_self_test_does_not_cancel_active_job():
+    async def scenario():
+        monitor = CrealityNativeMonitor("127.0.0.1", 9999, profile=K1, session=None)
+        jobs = []
+
+        async def on_job(job, live):
+            jobs.append(job)
+
+        monitor.data = {
+            "printFileName": "part.gcode", "printStartTime": 1000,
+            "state": 1, "printProgress": 0, "withSelfTest": 0,
+        }
+        await monitor._track_job(normalize(monitor.data, K1), on_job)
+        monitor.data["withSelfTest"] = 3
+        await monitor._track_job(normalize(monitor.data, K1), on_job)
+        assert jobs == []
+        assert monitor._job is not None
+        monitor.data.update(withSelfTest=0, printProgress=50, printJobTime=300)
+        monitor._snapshot_job()
+        await monitor._track_job(normalize(monitor.data, K1), on_job)
+        monitor.data.update(printProgress=100, printJobTime=600)
+        monitor._snapshot_job()
+        await monitor._track_job(normalize(monitor.data, K1), on_job)
+        assert len(jobs) == 1
+        assert jobs[0]["status"] == "completed"
+        assert jobs[0]["print_duration"] == 600
+
+    asyncio.run(scenario())
+
+
 def test_monitor_job_completed_despite_telemetry_reset_on_finish():
     """Принтер может обнулить printJobTime/usedMaterialLength в том же кадре, где прогресс
 
@@ -396,6 +440,8 @@ def test_full_print_cycle_sets_awaiting_removal_and_history():
     assert printer.awaiting_removal is True
     job = PrintJob.objects.get(printer=printer)
     assert job.status == "completed"
+    assert printer.jobs.count() == 1
+    assert printer.print_seconds == 600
 
 
 # --- веб: вкладка «Файлы» и превью -----------------------------------------------------------

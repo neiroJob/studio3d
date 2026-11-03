@@ -38,6 +38,8 @@ build_volume_mm: [220, 220, 250]
 # показывается, целевая всегда 0).
 objects:
   chamber: "temperature_sensor chassis"
+  # Подтверждено чтением обоих реальных K1C 2026-11-03.
+  filament_sensor: "filament_switch_sensor filament_sensor"
 
 camera:
   type: webrtc_iframe

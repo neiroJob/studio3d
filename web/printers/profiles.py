@@ -29,6 +29,9 @@
                     только так). Состояние света при этом не известно вживую — показывается
                     последняя отправленная команда (Printer.light_hint)
     tools           число экструдеров (по умолчанию 1)
+    filament.runout_diameter  для Hall-датчика в objects.filament_sensor: порог min_diameter
+                    из конфигурации принтера. Подписка на Diameter/is_active вместо
+                    filament_detected/enabled. Наличие нити: Diameter строго больше порога.
     gcode.start_macro   стартовый макрос, который должен быть в начале файла: PRINT_START
     gcode.model_names   как слайсеры пишут эту модель в «; printer_model = …»
     power_loss_recovery  путь файла восстановления после отключения питания на самом принтере
@@ -72,6 +75,7 @@ class Profile:
     start_macro: str = ""
     model_names: tuple = ()
     tools: int = 1
+    filament_runout_diameter: float | None = None
 
     @property
     def title(self):
@@ -104,6 +108,7 @@ def parse_profile(data, source="?"):
         cam = data.get("camera") or {}
         gcode = data.get("gcode") or {}
         light = data.get("light") or {}
+        filament = data.get("filament") or {}
         light_native_port = light.get("native_port")
         if "light" in caps and not light_native_port:
             if not (light.get("object") and light.get("on_gcode") and light.get("off_gcode")):
@@ -133,6 +138,9 @@ def parse_profile(data, source="?"):
             start_macro=str(gcode.get("start_macro") or ""),
             model_names=tuple(str(n) for n in (gcode.get("model_names") or [])),
             tools=int(data.get("tools", 1)),
+            filament_runout_diameter=(
+                float(filament["runout_diameter"]) if filament.get("runout_diameter") is not None else None
+            ),
         )
     except KeyError as e:
         raise ProfileError(f"{source}: нет обязательного поля {e}") from e
