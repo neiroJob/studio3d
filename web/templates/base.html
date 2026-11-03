@@ -21,9 +21,10 @@
         <a href="{% url 'orders' %}" class="{% if url == 'orders' or url == 'order_detail' or url == 'order_edit' or url == 'item_create' or url == 'item_edit' or url == 'payment_add' or url == 'cost_add' or url == 'file_add' %}on{% endif %}">Заказы</a>
       {% endif %}
       {% if "orders_full" in rights %}<a href="{% url 'order_create' %}" class="{% if url == 'order_create' %}on{% endif %}">Добавить заказ</a>{% endif %}
-      {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights %}
+      {% if "users_manage" in rights or "studio_settings" in rights or "tariffs_view" in rights or "tariffs_edit" in rights or "integrations_manage" in rights %}
         <div class="nav-group">Администрирование</div>
       {% endif %}
+      {% if "integrations_manage" in rights %}<a href="{% url 'telegram_settings' %}" class="{% if url == 'telegram_settings' or url == 'telegram_recipient_add' or url == 'telegram_recipient_edit' or url == 'telegram_pairing' %}on{% endif %}">Telegram</a>{% endif %}
       {% if "users_manage" in rights %}
         <a href="{% url 'users' %}" class="{% if url == 'users' or url == 'user_create' or url == 'user_edit' or url == 'user_password' %}on{% endif %}">Пользователи</a>
         <a href="{% url 'roles' %}" class="{% if url == 'roles' or url == 'role_create' or url == 'role_edit' %}on{% endif %}">Роли и права</a>

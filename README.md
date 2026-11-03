@@ -39,6 +39,37 @@ own server inside the studio network — no cloud account, no subscription, noth
 >
 > The user interface is in Russian today; English UI is on the roadmap.
 
+## Telegram operator bot (`dev`)
+
+The bot reports print start/end, pauses, faults/runout and lost/restored connections, with periodic photos
+and status every N minutes during printing. It can remind operators to remove finished parts.
+Private chats, groups, printer scope, events and intervals are configured under **Administration → Telegram**.
+Commands provide status/remaining time, photos, recent history and machine hours. The only printer control is light on/off.
+
+1. Open the official [@BotFather](https://t.me/BotFather), send `/newbot`, choose a name and a unique username ending in `bot`.
+2. Put its token in the server's `.env`: `TELEGRAM_BOT_TOKEN=your_token`. Never commit it or share it in chat.
+3. Run `bash update.sh` from the server repository on `dev`; check `docker compose logs --tail=50 bot`.
+   No inbound port or public webhook is required. Use a dedicated bot; existing webhooks are not removed automatically.
+4. Add a recipient in Administration → Telegram. For a private chat select an active project user with dashboard access;
+   for a group choose the group type. Select printers or leave the selection empty for all printers.
+5. Generate a single-use pairing code (10-minute expiry). The employee opens the private link and presses Start.
+   For a group, add the bot with message/photo permissions and send `/pair@bot_username CODE` inside that group.
+   Privacy mode can stay enabled. Group members can query status; light control additionally requires a bound private
+   account with the project's print-control permission and access to that printer in both scopes.
+6. Click Test, verify the message and delivery log, then enable notifications and select private/group/both delivery.
+   An interval of 0 disables periodic photos or repeated removal reminders, respectively.
+
+Use `/status`, `/status ID`, `/photo ID`, `/alerts`, `/history ID`, `/hours ID`, `/light ID on`,
+`/light ID off`, `/mute`, `/unmute`, `/help`, or the printer buttons. Print start/pause/cancel/heating controls
+and confirming part removal are deliberately unavailable. Revoking the project user's access revokes bot access.
+
+Photos are uploaded by the server; Telegram never needs access to LAN camera URLs. Camera failure produces an
+explicit text-only notification. The durable database queue retries network failures and Telegram rate limits;
+delivery may be delayed or duplicated if a network acknowledgement is lost. The bot is a monitoring channel.
+Actual Telegram delivery requires creating and configuring the bot first. K1C WebRTC frame capture still needs
+verification from the installation server; it has not passed the live test from the development environment.
+See the detailed [setup and troubleshooting guide (Russian)](docs/telegram.md), also explained in the admin UI.
+
 ## Screenshots
 
 ![Studio3D dashboard: six printers in different states](assets/github/dashboard.png)

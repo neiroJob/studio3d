@@ -7,6 +7,8 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from . import telegram_models  # noqa: F401 -- регистрация моделей интеграции в core
+
 TZ_CACHE_KEY = "studio:timezone"
 
 

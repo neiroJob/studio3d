@@ -11,7 +11,7 @@ import logging
 import time
 
 from asgiref.sync import sync_to_async
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -40,6 +40,11 @@ def load_printers():
 def save_job(printer_id, job, live):
     """Записать завершённое задание. Возвращает True, если запись новая."""
     close_old_connections()
+    with transaction.atomic():
+        return _save_job(printer_id, job, live)
+
+
+def _save_job(printer_id, job, live):
     printer = Printer.objects.get(pk=printer_id)
     if not job["end_time"] or job["end_time"] <= printer.history_since:
         return False  # уже учтено в базе наработки на момент добавления принтера
@@ -69,6 +74,13 @@ def save_job(printer_id, job, live):
     )
     if live and status == PrintJob.Status.COMPLETED:
         Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
+    try:
+        from core.telegram_events import record_finished
+
+        with transaction.atomic():
+            record_finished(printer, dict(job, external_id=external_id), live)
+    except Exception:
+        log.exception("Could not record Telegram finish for printer %s", printer_id)
     return created
 
 

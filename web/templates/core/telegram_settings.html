@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Telegram{% endblock %}{% block heading %}Telegram — оповещения оператора{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2>Подключение бота</h2>
+  <p>Токен: <b>{% if token_configured %}задан в окружении сервера{% else %}не задан{% endif %}</b>.
+    Сервис: <b>{% if worker_alive %}работает{% else %}нет свежего ответа{% endif %}</b>.
+    {% if runtime.bot_username %}Бот: <a href="https://t.me/{{ runtime.bot_username }}" target="_blank" rel="noopener">@{{ runtime.bot_username }}</a>.{% endif %}</p>
+  {% if runtime.last_error %}<p class="msg error">{{ runtime.last_error }}</p>{% endif %}
+  <details><summary>Как создать и подключить бота — по шагам</summary>
+    <ol>
+      <li>Откройте в Telegram официальный <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте <code>/newbot</code>. Задайте название и уникальное имя, оканчивающееся на <code>bot</code>.</li>
+      <li>Скопируйте токен BotFather в файл <code>.env</code> на сервере: <code>TELEGRAM_BOT_TOKEN=ваш_токен</code>. Не публикуйте токен, не отправляйте его оператору и не коммитьте в Git.</li>
+      <li>Из папки проекта на сервере выполните <code>bash update.sh</code>. Проверьте <code>docker compose logs --tail=50 bot</code>. Порт для бота открывать не нужно: он сам подключается к Telegram.</li>
+      <li>Нажмите «Добавить получателя». Для личного чата выберите пользователя проекта; для группы — тип «Группа операторов». Выберите принтеры или оставьте выбор пустым для всех.</li>
+      <li>Создайте одноразовый код. Для личного чата сотрудник открывает ссылку и нажимает «Запустить». Для группы добавьте бота и отправьте в ней <code>/pair КОД</code>. Код действует 10 минут и используется один раз.</li>
+      <li>Нажмите «Тест» возле привязанного чата. Затем включите уведомления и выберите получателей и интервал ниже.</li>
+    </ol>
+    <p>Привязка личного чата не выполняется только по имени Telegram: доступ подтверждает одноразовый код администратора. В группе статус и фото доступны её участникам. Светом управляет только привязанный сотрудник с правом управления печатью; для этого ему нужен также привязанный личный чат.</p>
+    <p>Бот никогда не запускает, не приостанавливает и не отменяет печать, не управляет нагревом и не отмечает снятие изделия. Команды: <code>/status</code>, <code>/photo</code>, <code>/alerts</code>, <code>/history</code>, <code>/hours</code>, <code>/light</code>, <code>/mute</code>, <code>/unmute</code>, <code>/help</code>.</p>
+    <p>Свежий снимок JPEG или кадр WebRTC загружается в Telegram самим сервером. Telegram не получает доступ к локальному адресу камеры. Если фото недоступно, состояние отправится текстом с пояснением. WebRTC может подключаться до 35 секунд.</p>
+    <p>Для нативной WebRTC-камеры K1C серверу нужен двусторонний UDP-доступ к принтеру. В Linux добавьте в серверный <code>.env</code> строку <code>COMPOSE_FILE=docker-compose.yml:docker-compose.telegram-lan.yml</code> и выполните <code>bash update.sh</code>: бот будет использовать сеть хоста. Проверяйте именно полученное фото — текстовая доставка с ошибкой камеры не подтверждает работу видео. Подробности и диагностика — в <code>docs/telegram.md</code>.</p>
+  </details>
+</div>
+<form method="post" class="panel" novalidate style="margin-top:16px">
+  {% csrf_token %}<h2>Что и как часто отправлять</h2>{{ form.non_field_errors }}
+  <div class="form">{% for field in form %}{% include "_field.html" with field=field %}{% endfor %}</div>
+  <p class="hint">Начало и завершение приходят отдельно от интервала. Периодические фото — только во время печати. Остановка бота не останавливает принтеры; очередь событий хранится в базе. Возможны повторные сообщения, если Telegram принял отправку, но подтверждение потерялось в сети.</p>
+  <div class="form-actions"><button class="btn pri">Сохранить</button></div>
+</form>
+<div class="panel" style="margin-top:16px"><div class="row"><h2>Получатели</h2><span class="spacer"></span><a class="btn pri" href="{% url 'telegram_recipient_add' %}">Добавить получателя</a></div>
+<div class="tbl-wrap"><table><tr><th>Получатель</th><th>Принтеры</th><th>Подключение</th><th>Действия</th></tr>
+{% for r in recipients %}<tr><td><a href="{% url 'telegram_recipient_edit' r.pk %}">{{ r.name }}</a><div class="small muted">{{ r.get_kind_display }}{% if r.user %} · {{ r.user.username }}{% endif %}</div>{% if not r.enabled %}Доступ отключён{% elif not r.subscribed %}Уведомления выключены{% endif %}</td><td>{% for p in r.printers.all %}{{ p.name }}{% if not forloop.last %}, {% endif %}{% empty %}Все{% endfor %}</td><td>{% if r.chat_id %}Привязан · {{ r.chat_id }}{% else %}Не привязан{% endif %}{% if r.last_error %}<div class="small">{{ r.last_error }}</div>{% endif %}</td><td>
+<form class="inline" method="post" action="{% url 'telegram_pairing' r.pk %}">{% csrf_token %}<button class="btn sm">Новый код</button></form>
+{% if r.chat_id %}<form class="inline" method="post" action="{% url 'telegram_test' r.pk %}">{% csrf_token %}<button class="btn sm">Тест</button></form> <form class="inline" method="post" action="{% url 'telegram_unlink' r.pk %}">{% csrf_token %}<button class="btn sm">Отвязать</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="4">Пока нет получателей. Добавьте оператора или группу и создайте код привязки.</td></tr>{% endfor %}</table></div></div>
+<div class="panel" style="margin-top:16px"><h2>Последние доставки</h2><div class="tbl-wrap"><table><tr><th>Когда</th><th>Кому</th><th>Событие</th><th>Результат</th></tr>{% for d in deliveries %}<tr><td>{{ d.event.created_at|date:"d.m H:i:s" }}</td><td>{{ d.recipient.name }}</td><td>{{ d.event.printer.name }} · {{ d.event.title }}</td><td>{% if d.sent_at %}Отправлено {{ d.sent_at|date:"H:i:s" }}{% elif d.skipped %}Пропущено{% else %}В очереди · попыток {{ d.attempts }}{% endif %}{% if d.last_error %}<div class="small">{{ d.last_error }}</div>{% endif %}</td></tr>{% empty %}<tr><td colspan="4">Доставок пока нет.</td></tr>{% endfor %}</table></div></div>
+{% endblock %}

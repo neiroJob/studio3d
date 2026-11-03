@@ -140,6 +140,8 @@ BACKUP_DIR = Path(env("BACKUP_DIR", BASE_DIR / "backups"))
 
 # Как часто обновлять превью камер на дашборде и в карточке, сек
 CAMERA_REFRESH_SECONDS = env_int("CAMERA_REFRESH_SECONDS", 10)
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CAMERA_STUN = env("TELEGRAM_CAMERA_STUN", "")
 # Загрузка G-code: файлы до 2 ГБ, в памяти не держим
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 

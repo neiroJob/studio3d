@@ -43,6 +43,18 @@ services:
       web:
         condition: service_healthy
 
+  bot:
+    image: studio3d-web:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "manage.py", "run_telegram"]
+    depends_on:
+      web:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped

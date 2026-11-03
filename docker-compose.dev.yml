@@ -23,5 +23,9 @@ services:
     volumes:
       - ./web:/app
 
+  bot:
+    volumes:
+      - ./web:/app
+
   backup:
     profiles: ["backup"]
