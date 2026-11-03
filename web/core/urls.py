@@ -1,8 +1,15 @@
 from django.urls import path
 
-from . import telegram_views, views, views_crm
+from . import mobile_api, telegram_views, views, views_crm
 
 urlpatterns = [
+    path("api/mobile/v1/login/", mobile_api.login, name="mobile_login"),
+    path("api/mobile/v1/logout/", mobile_api.logout, name="mobile_logout"),
+    path("api/mobile/v1/fleet/", mobile_api.fleet, name="mobile_fleet"),
+    path("api/mobile/v1/events/", mobile_api.events, name="mobile_events"),
+    path("api/mobile/v1/printers/<int:pk>/history/", mobile_api.history, name="mobile_history"),
+    path("api/mobile/v1/printers/<int:pk>/photo/", mobile_api.photo, name="mobile_photo"),
+    path("api/mobile/v1/printers/<int:pk>/light/", mobile_api.light, name="mobile_light"),
     path("", views.dashboard, name="dashboard"),
     path("healthz", views.healthz, name="healthz"),
     path("integrations/telegram/", telegram_views.manage, name="telegram_settings"),

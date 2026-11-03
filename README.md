@@ -41,6 +41,10 @@ own server inside the studio network — no cloud account, no subscription, noth
 
 ## Telegram operator bot (`dev`)
 
+An Android operator client is being developed on `dev`: [installation and build guide](android/README.md).
+Kotlin/Compose, no push notifications. Update the server for the mobile API; off-site access requires
+an external HTTPS endpoint, which has not been configured. No studio address or credentials are bundled.
+
 The bot reports print start/end, pauses, faults/runout and lost/restored connections, with periodic photos
 and status every N minutes during printing. It can remind operators to remove finished parts.
 Private chats, groups, printer scope, events and intervals are configured under **Administration → Telegram**.

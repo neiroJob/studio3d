@@ -8,6 +8,16 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .test-deps/
+.android-local/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
+.android-local/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
 .test-tmp-*/
 
 # Окружение и секреты
