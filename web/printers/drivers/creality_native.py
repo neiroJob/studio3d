@@ -130,9 +130,16 @@ def normalize(data, profile=None, connected=True, now=None):
         }
 
     light = _float(data.get("lightSw"), 0) > 0 if "lightSw" in data else None
-    # Родной веб-интерфейс K1 показывает «Consumable not detected» при materialStatus != 0.
-    # Нулевой флаг означает отсутствие предупреждения, а не доказанное наличие нити.
-    missing_filament = _float(data.get("materialStatus")) != 0
+    # Физически проверено на K1 1.3.5.22: materialDetector1=0 с нитью, 1 без нити.
+    # materialStatus — отдельное предупреждение и не заменяет показание датчика.
+    detector = data.get("materialDetector1")
+    if isinstance(detector, int) and not isinstance(detector, bool) and detector in (0, 1):
+        filament_present = detector == 0
+        missing_filament = not filament_present and status in (base.PRINTING, base.PAUSED)
+    else:
+        # Совместимость с прошивками без поля физического датчика.
+        missing_filament = _float(data.get("materialStatus")) != 0
+        filament_present = False if missing_filament else None
     if missing_filament:
         warning = "Датчик нити: нет нити в датчике — проверьте подачу пластика."
         message = f"{message} {warning}".strip()
@@ -140,7 +147,7 @@ def normalize(data, profile=None, connected=True, now=None):
         "status": status,
         "message": message,
         "faults": [message] if message and (status == base.ERROR or missing_filament) else [],
-        "filament": {"present": False if missing_filament else None, "enabled": None},
+        "filament": {"present": filament_present, "enabled": None},
         "temps": temps,
         "job": job,
         "light": light,

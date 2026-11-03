@@ -295,6 +295,34 @@ def test_monitor_tracks_job_completion():
     assert jobs == [("completed", True, 1400.0)]
 
 
+@pytest.mark.parametrize("detector, present", [(0, True), (1, False), (None, None), (2, None), (True, None), ("0", None)])
+def test_native_physical_filament_sensor(detector, present):
+    state = normalize({"state": 0, "materialDetector1": detector, "materialStatus": 0}, K1)
+    assert state["filament"] == {"present": present, "enabled": None}
+    assert state["message"] == ""
+    assert state["faults"] == []
+
+
+def test_native_physical_sensor_overrides_material_warning():
+    state = normalize({
+        "state": 1, "printFileName": "part.gcode", "printProgress": 30,
+        "materialDetector1": 0, "materialStatus": 1,
+    }, K1)
+    assert state["filament"]["present"] is True
+    assert state["message"] == ""
+
+
+@pytest.mark.parametrize("state_code", [1, 5])
+def test_native_physical_runout_warns_during_print_or_pause(state_code):
+    state = normalize({
+        "state": state_code, "printFileName": "part.gcode", "printProgress": 30,
+        "materialDetector1": 1, "materialStatus": 0,
+    }, K1)
+    assert state["filament"]["present"] is False
+    assert "нет нити в датчике" in state["message"]
+    assert state["message"] in state["faults"]
+
+
 def test_native_material_warning_does_not_guess_presence():
     data = {"state": 1, "printFileName": "part.gcode", "printProgress": 30, "materialStatus": 1}
     state = normalize(data, K1)
@@ -307,6 +335,22 @@ def test_native_material_warning_does_not_guess_presence():
     assert normalize(data, K1)["message"] == ""
     del data["materialStatus"]
     assert normalize(data, K1)["filament"]["present"] is None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("detector, label", [(0, "есть"), (1, "нет")])
+def test_native_filament_sensor_is_visible_in_project(client, detector, label):
+    from printers.state import write_state
+
+    make_user("k1_filament_operator", ROLE_OPERATOR)
+    printer = Printer.objects.create(name="K1-filament", profile_id="creality_k1", host="127.0.0.1", port=9999)
+    write_state(printer.pk, normalize({"state": 0, "materialDetector1": detector, "materialStatus": 0}, K1))
+    login(client, "k1_filament_operator")
+    detail = client.get(reverse("printer_detail", args=[printer.pk])).content.decode()
+    assert f"<dt>Пластик в тракте</dt><dd>{label}</dd>" in detail
+    tiles = client.get(reverse("printer_tiles")).content.decode()
+    assert f"Пластик: {label}" in tiles
+    assert "нет данных от датчика" not in detail
 
 
 def test_monitor_self_test_does_not_cancel_active_job():
