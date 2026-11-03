@@ -516,6 +516,25 @@ def test_monitor_catches_up_history_without_notification():
 
 
 @pytest.mark.django_db(transaction=True)
+def test_collector_long_job_id_is_bounded_and_idempotent():
+    printer = make_printer()
+    job = job_from_history({
+        "job_id": "/usr/data/printer_data/gcodes/" + "long-part-name-" * 20 + "@1793709147",
+        "filename": "long-part.gcode", "status": "completed",
+        "start_time": time.time() - 600, "end_time": time.time(), "print_duration": 600,
+    })
+    assert async_to_sync(collector.save_job)(printer.pk, job, True) is True
+    assert async_to_sync(collector.save_job)(printer.pk, job, True) is False
+    stored = PrintJob.objects.get(printer=printer)
+    assert len(stored.external_id) <= PrintJob._meta.get_field("external_id").max_length
+    assert stored.filename == job["filename"]
+    assert printer.print_seconds == 600
+    another = dict(job, external_id=job["external_id"] + "-different")
+    assert async_to_sync(collector.save_job)(printer.pk, another, True) is True
+    assert printer.jobs.count() == 2
+
+
+@pytest.mark.django_db(transaction=True)
 def test_collector_save_job_and_awaiting_removal():
     printer = make_printer(history_since=2000.0, print_seconds_base=3600)
     job = job_from_history(

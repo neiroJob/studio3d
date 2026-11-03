@@ -6,6 +6,7 @@
 
 import asyncio
 import datetime as dt
+import hashlib
 import logging
 import time
 
@@ -43,13 +44,18 @@ def save_job(printer_id, job, live):
     if not job["end_time"] or job["end_time"] <= printer.history_since:
         return False  # уже учтено в базе наработки на момент добавления принтера
     status = job["status"] if job["status"] in PrintJob.Status.values else PrintJob.Status.OTHER
-    existing = PrintJob.objects.filter(printer=printer, external_id=job["external_id"]).first()
+    external_id = job["external_id"]
+    # K1 включает полный путь в ID; PostgreSQL не примет его длиннее varchar(64).
+    # Хеш сохраняет стабильное сопоставление повторных событий без обрезания пути.
+    if len(external_id) > PrintJob._meta.get_field("external_id").max_length:
+        external_id = hashlib.sha256(external_id.encode("utf-8")).hexdigest()
+    existing = PrintJob.objects.filter(printer=printer, external_id=external_id).first()
     if existing and existing.status == PrintJob.Status.COMPLETED and status != PrintJob.Status.COMPLETED:
         # Запоздавшая резервная оценка не должна понизить подтверждённое завершение.
         return False
     _, created = PrintJob.objects.update_or_create(
         printer=printer,
-        external_id=job["external_id"],
+        external_id=external_id,
         defaults={
             "filename": job["filename"],
             "status": status,
