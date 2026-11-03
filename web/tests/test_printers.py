@@ -183,31 +183,31 @@ def test_normalize_states():
 
 def test_normalize_warns_on_filament_sensor_runout():
     """Дискретный датчик: предупреждение включено только при активной реакции датчика."""
-    profile = get_profile("qidi_plus_4")
+    profile = get_profile("creality_k1c")
+    sensor = profile.objects["filament_sensor"]
     st = {
         "webhooks": {"state": "ready"},
         "print_stats": {"state": "printing", "filename": "a.gcode"},
-        "filament_switch_sensor fila": {"enabled": True, "filament_detected": False},
+        sensor: {"enabled": True, "filament_detected": False},
     }
     printing = normalize(st, profile=profile)
     assert printing["status"] == base.PRINTING and "датчик нити" in printing["message"].lower()
     assert printing["filament"] == {"present": False, "enabled": True}
 
     # датчик выключен или нить есть — предупреждения нет
-    st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": False}
+    st[sensor] = {"enabled": False, "filament_detected": False}
     assert normalize(st, profile=profile)["message"] == ""
-    st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": True}
+    st[sensor] = {"enabled": True, "filament_detected": True}
     assert normalize(st, profile=profile)["message"] == ""
     assert normalize(st, profile=profile)["filament"] == {"present": True, "enabled": True}
 
-    plus4 = get_profile("qidi_plus_4")
     st["print_stats"] = {"state": "standby"}
-    st["filament_switch_sensor fila"] = {"enabled": False, "filament_detected": True}
-    assert normalize(st, profile=plus4)["filament"] == {"present": True, "enabled": False}
+    st[sensor] = {"enabled": False, "filament_detected": True}
+    assert normalize(st, profile=profile)["filament"] == {"present": True, "enabled": False}
 
     # не печатает — датчик не проверяется
     st["print_stats"] = {"state": "standby"}
-    st["filament_switch_sensor fila"] = {"enabled": True, "filament_detected": False}
+    st[sensor] = {"enabled": True, "filament_detected": False}
     assert normalize(st, profile=profile)["message"] == ""
 
 
@@ -218,16 +218,18 @@ def sensor_reading(profile, present):
 
 
 @pytest.mark.parametrize("diameter, present", [(-0.56, False), (0.3, False), (0.88, True), (None, None), (float("nan"), None)])
-def test_q1_hall_uses_verified_threshold(diameter, present):
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "qidi_plus_4"])
+def test_hall_uses_verified_threshold(profile_id, diameter, present):
+    profile = get_profile(profile_id)
     state = normalize(
         {
             "print_stats": {"state": "paused"},
             "hall_filament_width_sensor": {"Diameter": diameter, "is_active": False},
             "filament_switch_sensor fila": {"enabled": True, "filament_detected": True},
         },
-        profile=Q1,
+        profile=profile,
     )
-    assert Q1.filament_runout_diameter == 0.3
+    assert profile.filament_runout_diameter == 0.3
     assert state["filament"] == {"present": present, "enabled": False}
     assert bool(state["message"]) == (present is False)
 

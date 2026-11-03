@@ -16,7 +16,12 @@ build_volume_mm: [305, 305, 280]
 
 objects:
   chamber: "heater_generic chamber"
-  filament_sensor: "filament_switch_sensor fila"
+  # Физическая проверка 2026-11-03: fila постоянно true, Hall реагирует на нить.
+  filament_sensor: "hall_filament_width_sensor"
+
+filament:
+  # min_diameter из конфигурации реального Plus 4.
+  runout_diameter: 0.3
 
 camera:
   type: mjpeg_snapshot
