@@ -191,6 +191,15 @@ def test_finish_ignores_imported_history_and_deduplicates(setup_bot):
     assert TelegramEvent.objects.get(kind="finish").payload["status"] == base.FINISHED
 
 
+def test_finish_catches_up_after_ready_arrives_before_history(setup_bot):
+    _, printer, _, _ = setup_bot
+    record_state(printer.pk, state())
+    record_state(printer.pk, state(base.READY, job=None))
+    assert not TelegramPrinterState.objects.get().active
+    record_finished(printer, finished(printer), live=False)
+    assert TelegramEvent.objects.filter(kind="finish").count() == 1
+
+
 def test_disabled_and_recipient_scope(setup_bot):
     _, printer, recipient, config = setup_bot
     config.enabled = False

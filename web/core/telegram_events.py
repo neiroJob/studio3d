@@ -136,7 +136,9 @@ def record_finished(printer, job, live):
     row, _ = TelegramPrinterState.objects.select_for_update().get_or_create(printer=printer)
     end = float(job.get("end_time") or 0)
     observed = row.active_since.timestamp() if row.active_since else 0
-    caught_up = row.active and observed and end >= observed
+    # READY may arrive before history sync after reconnect. The observed start
+    # still bounds catch-up, even if the current snapshot is already idle.
+    caught_up = observed and end >= observed
     if not live and not caught_up:
         return  # Не отправлять старую историю при первом подключении.
     completed = job["status"] == "completed"
