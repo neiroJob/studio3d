@@ -1,43 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Склад{% endblock %}
-{% block heading %}Склад{% endblock %}
+{% block title %}Склад{% endblock %}{% block heading %}Склад{% endblock %}
 {% block content %}
-<div class="panel">
-  <div class="row" style="margin-bottom:12px">
-    <span class="muted small">Остаток пока ведётся вручную. Автосписание по печати и QR-наклейки — отдельные задачи.</span>
-    <span class="spacer"></span>
-    {% if "stock_income" in rights %}
-    <a class="btn" href="{% url 'stock_group_create' %}">Добавить группу</a>
-    <a class="btn pri" href="{% url 'stock_item_create' %}">Добавить позицию</a>
-    {% endif %}
-  </div>
-  {% for group in groups %}
-  <h2 class="row">{{ group.name }}<span class="spacer"></span>
-    {% if "stock_income" in rights %}
-    <a class="btn sm" href="{% url 'stock_group_edit' group.pk %}">Изменить группу</a>
-    <form class="inline" method="post" action="{% url 'stock_group_delete' group.pk %}">{% csrf_token %}<button class="btn sm warn" type="submit">Удалить группу</button></form>
-    {% endif %}
-  </h2>
-  <div class="tbl-wrap"><table>
-    <tr><th>Название</th><th class="num">Остаток</th><th>Ед.</th><th class="num">Минимум</th><th>Заметка</th><th></th></tr>
-    {% for item in group.items.all %}
-    <tr class="{% if item.is_archived %}off{% endif %}">
-      <td><b>{{ item.name }}</b>{% if item.is_archived %} <span class="pill">архив</span>{% endif %}</td>
-      <td class="num">{{ item.quantity }}{% if item.is_low %} <span class="pill c" style="--c:var(--err)">мало</span>{% endif %}</td>
-      <td>{{ item.unit }}</td>
-      <td class="num">{{ item.min_quantity|default:"—" }}</td>
-      <td>{{ item.note|default:"—" }}</td>
-      <td class="num">
-        {% if "stock_income" in rights %}
-        <a class="btn sm" href="{% url 'stock_item_edit' item.pk %}">Изменить</a>
-        <form class="inline" method="post" action="{% url 'stock_item_archive' item.pk %}">{% csrf_token %}<button class="btn sm" type="submit">{% if item.is_archived %}Восстановить{% else %}В архив{% endif %}</button></form>
-        {% endif %}
-      </td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="muted">Позиций в группе нет</td></tr>{% endfor %}
-  </table></div>
-  {% empty %}
-  <p class="muted">Групп склада пока нет{% if "stock_income" in rights %} — начните с кнопки «Добавить группу» выше{% endif %}.</p>
-  {% endfor %}
-</div>
+<div class="row" style="margin-bottom:14px"><b>Материалы и изделия · один склад</b><span class="spacer"></span>
+{% if "stock_income" in rights %}<a class="btn" href="{% url 'stock_group_create' %}">Добавить группу</a><a class="btn" href="{% url 'stock_item_create' %}">Добавить позицию</a><a class="btn pri" href="{% url 'stock_spool_add' %}">Приход катушки</a>{% endif %}
+<a class="btn" href="{% url 'stock_operation' %}">Документ склада</a></div>
+<div class="tabs"><a href="?tab=balances" class="{% if tab == 'balances' %}on{% endif %}">Остатки</a><a href="?tab=spools" class="{% if tab == 'spools' %}on{% endif %}">Катушки</a><a href="?tab=documents" class="{% if tab == 'documents' %}on{% endif %}">Документы</a><a href="?tab=prints" class="{% if tab == 'prints' %}on{% endif %}">Учёт печатей</a><a href="?tab=reorder" class="{% if tab == 'reorder' %}on{% endif %}">Пополнение</a><a href="?tab=groups" class="{% if tab == 'groups' %}on{% endif %}">Группы</a></div>
+{% if tab == 'spools' %}
+<div class="panel"><h2>Катушки: штуки и вес без тары</h2><div class="tbl-wrap"><table><tr><th>Катушка / материал</th><th>Номинал</th><th>Осталось</th><th>Тара</th><th>Закупка</th><th>Место</th><th></th></tr>
+{% for s in spools %}<tr><td><b>{{ s.code }}</b><br>{{ s.item.name }}</td><td>{{ s.nominal_g }} г</td><td>{{ s.remaining_g }} г</td><td>{{ s.tare_g }} г</td><td>{{ s.purchase_price }} ₽</td><td>{{ s.location|default:"—" }} · {{ s.get_status_display }}{% if s.installed_on %}<br>{{ s.installed_on.printer.name }}{% endif %}</td><td>{% if "stock_income" in rights %}<a class="btn sm" href="{% url 'stock_spool_edit' s.pk %}">Изменить</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">Катушек нет. Для старых остатков используйте начальную регистрацию без повторного прихода.</td></tr>{% endfor %}</table></div></div>
+{% elif tab == 'documents' %}
+{% if drafts %}<div class="panel"><h2>Черновики: остатки ещё не изменены</h2>{% for d in drafts %}<div class="row"><span>#{{ d.pk }} · {{ d.get_kind_display }} · {{ d.item.name }} · {{ d.quantity }}{% if d.spool %} г · {{ d.spool.code }}{% else %} {{ d.item.unit }}{% endif %} · {{ d.reason }}</span><form method="post" action="{% url 'stock_document_post' d.pk %}">{% csrf_token %}<button class="btn">Провести</button></form></div>{% endfor %}</div>{% endif %}
+<div class="panel"><h2>Журнал движения</h2><p class="hint">Проведённые операции сохраняются. Исправление расхода печати — отдельная запись.</p><div class="tbl-wrap"><table><tr><th>Дата / автор</th><th>Операция</th><th>Позиция</th><th>Изменение</th><th>Основание</th></tr>{% for m in movements %}<tr><td>{{ m.created_at|date:"d.m.Y H:i" }}<br>{{ m.created_by|default:"Автоматически" }}</td><td>{{ m.get_kind_display }} #{{ m.pk }}</td><td>{{ m.item.name }}{% if m.spool %}<br>{{ m.spool.code }}{% endif %}</td><td>{{ m.quantity }} {{ m.unit }}</td><td>{{ m.reason }}</td></tr>{% empty %}<tr><td colspan="5">Документов пока нет.</td></tr>{% endfor %}</table></div></div>
+{% elif tab == 'prints' %}
+<div class="panel"><h2>Автоматический учёт печати</h2><p class="hint">Успех — вес всего файла из слайсера. Ошибка/отмена — доля по времени печати. Недостаточно данных — расход требует проверки.</p><div class="tbl-wrap"><table><tr><th>Печать / катушка</th><th>Оценка</th><th>Списано / стоимость</th><th>Состояние</th><th></th></tr>{% for r in runs %}<tr><td>{{ r.printer.name }}<br>{{ r.filename }}<br>{{ r.spool.code }}</td><td>{{ r.estimated_g|default_if_none:"—" }} г<br>{{ r.estimated_seconds|default_if_none:"—" }} с</td><td>{{ r.consumed_g }} г<br>{{ r.material_cost }} ₽</td><td>{{ r.get_state_display }}{% if r.issue %}<div class="msg error">{{ r.issue }}</div>{% endif %}{% if r.removed_at %}<br>Изделие снято{% endif %}</td><td>{% if can_correct and r.state != 'active' %}<a class="btn sm" href="{% url 'stock_correction' r.pk %}">Уточнить вес</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Перед печатью укажите катушку и изделие в карточке принтера.</td></tr>{% endfor %}</table></div>
+<h2>Настройка принтеров</h2>{% for p in printers %}<p>{{ p.name }}{% if "print_control" in rights %} · <a href="{% url 'stock_setup' p.pk %}">Катушка и выпуск</a>{% endif %}</p>{% endfor %}</div>
+{% elif tab == 'groups' %}
+<div class="panel">{% for group in groups %}<div class="row"><h2>{{ group.name }}</h2><span class="spacer"></span>{% if "stock_income" in rights %}<a class="btn sm" href="{% url 'stock_group_edit' group.pk %}">Изменить группу</a><form method="post" action="{% url 'stock_group_delete' group.pk %}">{% csrf_token %}<button class="btn sm warn">Удалить группу</button></form>{% endif %}</div>{% empty %}<p>Групп пока нет.</p>{% endfor %}</div>
+{% else %}
+<div class="panel"><h2>{% if tab == 'reorder' %}Нужно пополнить{% else %}Остатки и резервы{% endif %}</h2>
+<form method="get" class="row filters" style="margin-bottom:14px"><input type="hidden" name="tab" value="{{ tab }}"><input name="q" value="{{ query }}" placeholder="Найти позицию" aria-label="Найти позицию"><select name="group" aria-label="Группа"><option value="">Все группы</option>{% for g in groups %}<option value="{{ g.pk }}" {% if selected_group == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select><label class="check"><input type="checkbox" name="archive" value="1" {% if archived %}checked{% endif %}>Архив</label><button class="btn">Найти</button></form>
+<div class="tbl-wrap"><table><tr><th>Позиция</th><th class="num">В наличии</th><th class="num">Резерв</th><th class="num">Свободно</th><th>Минимум</th><th>Повторная закупка</th><th></th></tr>
+{% for row in rows %}{% with i=row.item %}<tr><td><b><a href="{% url 'stock_item_detail' i.pk %}">{{ i.name }}</a></b><br><small class="muted">{{ i.group.name }}{% if i.is_archived %} · архив{% endif %}{% if i.finished_product %} · готовое изделие{% endif %}</small><br>{{ i.note }}{% if i.spools.count %}<br>{{ i.spools.count }} шт. катушек{% endif %}</td><td class="num">{{ i.quantity }} {{ i.unit }}</td><td class="num"><a href="{% url 'stock_item_detail' i.pk %}#reserve">{{ row.reserved|floatformat:2 }} {{ i.unit }}</a></td><td class="num">{{ row.available|floatformat:2 }} {{ i.unit }}</td><td>{{ i.min_quantity|default_if_none:"—" }}{% if row.low %}<br><span class="pill c" style="--c:var(--err)">мало · пополнить</span>{% endif %}</td><td>{% if i.purchase_price %}{{ i.purchase_price }} ₽ / {{ i.purchase_quantity }} {{ i.unit }}<br>{% endif %}{{ i.supplier }}{% if i.product_url %}<br><a href="{{ i.product_url }}" target="_blank" rel="noopener noreferrer">Открыть товар ↗</a>{% endif %}</td><td>{% if "stock_income" in rights %}<a class="btn sm" href="{% url 'stock_item_edit' i.pk %}">Изменить</a><form method="post" action="{% url 'stock_item_archive' i.pk %}">{% csrf_token %}<button class="btn sm">{% if i.is_archived %}Восстановить{% else %}В архив{% endif %}</button></form>{% endif %}</td></tr>{% endwith %}{% empty %}<tr><td colspan="7">Позиций нет.</td></tr>{% endfor %}</table></div><p class="hint">Свободно = в наличии − резерв заказов и печатей. Катушки имеют индивидуальный вес, например 750 или 1000 г.</p></div>
+{% endif %}
 {% endblock %}

@@ -127,6 +127,7 @@ def normalize(data, profile=None, connected=True, now=None):
             "remaining": round(_float(remaining)) if remaining is not None else None,
             "filament_mm": round(_float(data.get("usedMaterialLength")), 1),
             "filament_g_total": meta.get("filamentWeight"),
+            "estimated_seconds": meta.get("timeCost"),
         }
 
     light = _float(data.get("lightSw"), 0) > 0 if "lightSw" in data else None

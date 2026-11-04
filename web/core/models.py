@@ -7,7 +7,10 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from . import mobile_models  # noqa: F401 -- регистрация моделей мобильного клиента
+from . import (
+    mobile_models,  # noqa: F401 -- регистрация моделей мобильного клиента
+    stock_models,  # noqa: F401 -- склад в существующем core
+)
 
 TZ_CACHE_KEY = "studio:timezone"
 
@@ -103,6 +106,19 @@ class StockItem(models.Model):
         "Минимальный остаток", max_digits=10, decimal_places=2, null=True, blank=True
     )
     note = models.CharField("Заметка", max_length=255, blank=True)
+    purchase_price = models.DecimalField(
+        "Цена закупки, ₽", max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+    purchase_quantity = models.DecimalField(
+        "Количество за эту цену (в единицах позиции)",
+        max_digits=10,
+        decimal_places=2,
+        default=1,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    supplier = models.CharField("Поставщик", max_length=200, blank=True)
+    product_url = models.URLField("Ссылка на товар для повторной закупки", max_length=1000, blank=True)
+    finished_product = models.BooleanField("Готовое изделие", default=False)
     is_archived = models.BooleanField("В архиве", default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -132,7 +148,28 @@ class StockItem(models.Model):
         items = self.order_items.filter(order__status__is_final=False)
         if exclude_item is not None and exclude_item.pk:
             items = items.exclude(pk=exclude_item.pk)
-        return sum((i.remaining_grams for i in items), Decimal("0"))
+        from .stock_models import PrintStockRun
+
+        order_reserves = {i.pk: i.remaining_grams for i in items}
+        legacy = sum(order_reserves.values(), Decimal("0"))
+        active = PrintStockRun.objects.filter(spool__item=self, state="active")
+        # Резерв задания входит в резерв заказа: не складываем их дважды.
+        extra = sum((r.reserved_g for r in active.filter(order_item=None)), Decimal("0"))
+        active_by_order = {}
+        for run in active.exclude(order_item=None):
+            if exclude_item is not None and run.order_item_id == exclude_item.pk:
+                continue
+            active_by_order[run.order_item_id] = (
+                active_by_order.get(run.order_item_id, Decimal("0")) + run.reserved_g
+            )
+        extra += sum(
+            (
+                max(weight - order_reserves.get(pk, Decimal("0")), Decimal("0"))
+                for pk, weight in active_by_order.items()
+            ),
+            Decimal("0"),
+        )
+        return legacy + extra
 
     def available_grams(self, exclude_item=None):
         """Свободно для нового резерва: остаток минус резерв других изделий. `None` — не считается."""
@@ -448,6 +485,9 @@ class OrderItem(models.Model):
         validators=[MinValueValidator(0)],
         help_text="Из G-code файла печати, можно поправить вручную.",
     )
+    stock_accounted_g = models.DecimalField(
+        "Расход, уже учтённый заданиями, г", max_digits=12, decimal_places=2, default=0
+    )
     unit_time_min = models.PositiveIntegerField(
         "Время печати одной штуки, мин",
         default=0,
@@ -472,7 +512,15 @@ class OrderItem(models.Model):
         """Резерв: пластик на ещё не напечатанные штуки. Напечатанные уже списаны со склада."""
         if self.plastic_id is None:
             return Decimal("0")
-        return self.unit_weight_g * max(self.quantity - self.printed, 0)
+        if not self.pk:
+            return self.need_grams
+        success = sum(
+            self.stock_runs.filter(job__status="completed", state="settled").values_list(
+                "consumed_g", flat=True
+            ),
+            Decimal("0"),
+        )
+        return max(self.need_grams - max(success, self.unit_weight_g * self.printed), Decimal("0"))
 
     @property
     def total_time_min(self):
@@ -673,6 +721,11 @@ class AuditLog(models.Model):
         STOCK_ITEM_CREATE = "stock_item_create", "Позиция склада создана"
         STOCK_ITEM_UPDATE = "stock_item_update", "Позиция склада изменена"
         STOCK_ITEM_ARCHIVE = "stock_item_archive", "Позиция склада архивирована/восстановлена"
+        STOCK_DOCUMENT = "stock_document", "Документ склада"
+        STOCK_SPOOL_INCOME = "stock_spool_income", "Катушка принята на склад"
+        STOCK_SPOOL_UPDATE = "stock_spool_update", "Катушка изменена"
+        STOCK_SETUP = "printer_stock_setup", "Катушка и выпуск принтера настроены"
+        STOCK_CORRECTION = "stock_print_correction", "Расход печати уточнён"
         CLIENT_CREATE = "client_create", "Клиент создан"
         CLIENT_UPDATE = "client_update", "Клиент изменён"
         CLIENT_ARCHIVE = "client_archive", "Клиент архивирован/восстановлен"

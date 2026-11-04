@@ -478,6 +478,9 @@ def _write_off_plastic(request, item, delta):
     Резерв пересчитывается сам: он считается по ещё не напечатанной части. Если единица позиции
     не вес (катушки, штуки), граммы не пересчитать — тогда остаток правят вручную.
     """
+    if item.stock_runs.exists() or (item.plastic_id and item.plastic.spools.exists()):
+        # Расход уже привязан к печати. Изменение количества изделий не списывает его второй раз.
+        return
     stock = item.plastic
     if not delta or stock is None or not item.unit_weight_g or stock.grams_per_unit is None:
         return

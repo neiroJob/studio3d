@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }}{% endblock %}{% block heading %}{{ item.name }}{% endblock %}
+{% block content %}<div class="panel"><div class="row"><h2>{{ item.group.name }}</h2><span class="spacer"></span><a class="btn" href="{% url 'stock' %}">На склад</a>{% if "stock_income" in rights %}<a class="btn" href="{% url 'stock_item_edit' item.pk %}">Изменить позицию</a>{% endif %}</div>
+<p>В наличии {{ item.quantity }} {{ item.unit }} · {{ item.note }}</p>
+<h2>Повторная закупка</h2><p>{{ item.purchase_price }} ₽ за {{ item.purchase_quantity }} {{ item.unit }} · {{ item.supplier|default:"Поставщик не указан" }}</p>{% if item.product_url %}<a href="{{ item.product_url }}" target="_blank" rel="noopener noreferrer">Открыть товар у поставщика ↗</a>{% endif %}
+<h2>Катушки</h2>{% for s in spools %}<p>{{ s.code }} · {{ s.remaining_g }} / {{ s.nominal_g }} г · тара {{ s.tare_g }} г · {{ s.location }}{% if "stock_income" in rights %} · <a href="{% url 'stock_spool_edit' s.pk %}">Изменить место и тару</a>{% endif %}</p>{% empty %}<p>Катушек нет.</p>{% endfor %}
+<h2 id="reserve">Из чего состоит резерв</h2><p class="hint">Резерв задания входит в резерв связанного заказа, повторно они не суммируются.</p>
+{% for i in orders %}<p>Изделие #{{ i.pk }} · {{ i.name }}: {{ i.remaining_grams }} г{% if "orders_full" in rights %} · <a href="{% url 'order_detail' i.order_id %}">Заказ</a>{% endif %}</p>{% endfor %}
+{% for r in runs %}<p>Печать: {{ r.printer.name }} · {{ r.filename }} · {{ r.spool.code }} · {{ r.reserved_g }} г</p>{% endfor %}
+<h2>Движение</h2><div class="tbl-wrap"><table><tr><th>Дата</th><th>Операция</th><th>Изменение</th><th>Основание / автор</th></tr>{% for m in movements %}<tr><td>{{ m.created_at|date:"d.m.Y H:i" }}</td><td>{{ m.get_kind_display }}</td><td>{{ m.quantity }} {{ m.unit }}</td><td>{{ m.reason }} · {{ m.created_by|default:"Автоматически" }}</td></tr>{% empty %}<tr><td colspan="4">Операций пока нет.</td></tr>{% endfor %}</table></div></div>{% endblock %}

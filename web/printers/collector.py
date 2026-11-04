@@ -45,7 +45,7 @@ def save_job(printer_id, job, live):
 
 
 def _save_job(printer_id, job, live):
-    printer = Printer.objects.get(pk=printer_id)
+    printer = Printer.objects.select_for_update().get(pk=printer_id)
     if not job["end_time"] or job["end_time"] <= printer.history_since:
         return False  # уже учтено в базе наработки на момент добавления принтера
     status = job["status"] if job["status"] in PrintJob.Status.values else PrintJob.Status.OTHER
@@ -58,7 +58,7 @@ def _save_job(printer_id, job, live):
     if existing and existing.status == PrintJob.Status.COMPLETED and status != PrintJob.Status.COMPLETED:
         # Запоздавшая резервная оценка не должна понизить подтверждённое завершение.
         return False
-    _, created = PrintJob.objects.update_or_create(
+    saved, created = PrintJob.objects.update_or_create(
         printer=printer,
         external_id=external_id,
         defaults={
@@ -72,8 +72,14 @@ def _save_job(printer_id, job, live):
             "filament_g": job["filament_g"],
         },
     )
+    from core.stock import finish
+
+    finish(saved)
     if live and status == PrintJob.Status.COMPLETED:
-        Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
+        from core.stock_models import PrintStockRun
+
+        if not PrintStockRun.objects.filter(job=saved, removed_at__isnull=False).exists():
+            Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
     return created
 
 
@@ -133,6 +139,9 @@ class PrinterWorker:
 
     async def on_state(self, state):
         self.connected = True
+        from core.stock import observe
+
+        await sync_to_async(observe)(self.printer.pk, state)
         if state["status"] == base.PRINTING:
             await clear_awaiting(self.printer.pk)
         previous_job = self.last_state.get("job") or {}

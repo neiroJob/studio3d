@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import mobile_api, views, views_crm
+from . import mobile_api, views, views_crm, views_stock
 
 urlpatterns = [
     path("api/mobile/v1/login/", mobile_api.login, name="mobile_login"),
@@ -15,12 +15,19 @@ urlpatterns = [
     path("setup/", views.setup, name="setup"),
     path("settings/", views.studio_settings, name="settings"),
     path("journal/", views.journal, name="journal"),
-    path("stock/", views.stock, name="stock"),
+    path("stock/", views_stock.stock, name="stock"),
+    path("stock/spools/add/", views_stock.spool_add, name="stock_spool_add"),
+    path("stock/spools/<int:pk>/", views_stock.spool_edit, name="stock_spool_edit"),
+    path("stock/operation/", views_stock.operation, name="stock_operation"),
+    path("stock/documents/<int:pk>/post/", views_stock.document_post, name="stock_document_post"),
+    path("stock/runs/<int:pk>/correct/", views_stock.correction, name="stock_correction"),
+    path("stock/printers/<int:pk>/", views_stock.setup, name="stock_setup"),
     path("stock/groups/add/", views.stock_group_edit, name="stock_group_create"),
     path("stock/groups/<int:pk>/", views.stock_group_edit, name="stock_group_edit"),
     path("stock/groups/<int:pk>/delete/", views.stock_group_delete, name="stock_group_delete"),
     path("stock/items/add/", views.stock_item_edit, name="stock_item_create"),
     path("stock/items/<int:pk>/", views.stock_item_edit, name="stock_item_edit"),
+    path("stock/items/<int:pk>/detail/", views_stock.item_detail, name="stock_item_detail"),
     path("stock/items/<int:pk>/archive/", views.stock_item_archive, name="stock_item_archive"),
     path("clients/", views_crm.clients, name="clients"),
     path("clients/add/", views_crm.client_edit, name="client_create"),

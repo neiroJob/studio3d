@@ -5,6 +5,7 @@
     {% else %}<div class="thumb"></div>{% endif %}
   </a>
   <div style="min-width:0">
+    {% if s.stock_warning %}<p class="small" style="color:var(--err)">Склад: {{ s.stock_warning }}</p>{% endif %}
     <div class="tile-head"><div><a href="{% url 'printer_detail' p.pk %}" style="text-decoration:none"><b>{{ p.name }}</b></a><div class="model">{{ p.profile.title|default:p.profile_id }}{% if p.zone %} · {{ p.zone }}{% endif %}</div></div>
       <span class="status"><span class="dot"></span>{{ s.label }}</span></div>
     {% if s.status == "offline" %}

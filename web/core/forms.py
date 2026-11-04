@@ -76,13 +76,43 @@ class StockGroupForm(forms.ModelForm):
 class StockItemForm(forms.ModelForm):
     class Meta:
         model = StockItem
-        fields = ["group", "name", "unit", "quantity", "min_quantity", "note"]
+        fields = [
+            "group",
+            "name",
+            "unit",
+            "quantity",
+            "min_quantity",
+            "note",
+            "purchase_price",
+            "purchase_quantity",
+            "supplier",
+            "product_url",
+            "finished_product",
+        ]
         widgets = {"note": forms.TextInput()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["group"].queryset = StockGroup.objects.all()
         self.fields["group"].empty_label = None
+        self.fields["purchase_price"].required = False
+        self.fields["purchase_quantity"].required = False
+        if self.instance.pk and self.instance.spools.exists():
+            self.fields["quantity"].disabled = True
+            self.fields["unit"].disabled = True
+            self.fields[
+                "quantity"
+            ].help_text = "Вес меняется документами и заданиями, а не прямым редактированием."
+
+        if self.instance.pk and self.instance.output_setups.exists():
+            self.fields["unit"].disabled = True
+            self.fields["finished_product"].disabled = True
+
+    def clean_purchase_price(self):
+        return self.cleaned_data.get("purchase_price") or Decimal("0")
+
+    def clean_purchase_quantity(self):
+        return self.cleaned_data.get("purchase_quantity") or Decimal("1")
 
 
 # --- CRM ---------------------------------------------------------------------------------------

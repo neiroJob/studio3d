@@ -191,6 +191,39 @@ is in [README.ru.md](README.ru.md) (Russian).
 - Login throttling per IP, CSRF protection, audit log of every printer command.
 - Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
+## Automatic warehouse
+
+The existing Stock page now includes balances/reservations, individual filament spools,
+posted movements and drafts, print accounting, replenishment and existing groups/archive.
+Store the supplier, reorder product URL and purchase price **per specified quantity**.
+Each spool has its own nominal/net remaining/tare weight, purchase cost and location.
+
+Before use, verify legacy stock units and weights. A piece is never assumed to mean 1 kg.
+Register existing spools using the opening-balance option to avoid receiving stock twice.
+Kilogram positions are converted to grams when the first spool is registered for 0.01 g precision.
+In each printer's **Spool and output** settings, select its spool, optional order item,
+finished-goods stock item (unit: pieces), and pieces per build plate. Settings persist until
+changed: update them before printing a different product. A spool belongs to one printer.
+
+The collector snapshots these settings and slicer estimates when printing is observed,
+including printer-panel starts. Success consumes the full file estimate; errors/manual
+cancellation consume a capped time proportion, excluding observed pauses and preparation
+before filament feed. Missing estimates or incomplete time observations require administrator
+review instead of an invented weight. Sampling precision follows printer telemetry.
+Unconfigured printers show a warning and do not consume unassigned stock.
+
+Finished goods are received only after **Part removed**; defective output is excluded.
+Events are idempotent; the legacy order progress counter does not consume material again
+for orders with automatically tracked prints. Administrators can correct total consumed
+grams with a reason; the adjustment, actor and original movement remain in the ledger.
+Material cost uses the spool's price snapshot, not a later catalog price.
+
+Operators can write off stock, managers can receive/manage the catalog, and studio-settings
+administrators can count inventory/correct print consumption. Drafts do not change balances;
+posting rechecks current stock and reservations. Update normally with `bash update.sh` on the
+intended branch (core migrations 0014). Validate a real cycle on an idle printer after setup;
+development tests do not constitute physical printer acceptance or a live-server deployment.
+
 ## License
 
 Studio3D is **source-available** under the [Business Source License 1.1](LICENSE). It is not an OSI-approved open

@@ -4,6 +4,7 @@ import time
 
 from django.contrib import messages
 from django.core.cache import cache
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -294,8 +295,12 @@ def light(request, pk, mode):
 
 @right_required("print_plate")
 @require_POST
+@transaction.atomic
 def plate_cleared(request, pk):
-    printer = get_object_or_404(Printer, pk=pk)
+    printer = get_object_or_404(Printer.objects.select_for_update(), pk=pk)
+    if not printer.awaiting_removal:
+        messages.info(request, "Снятие изделия уже учтено.")
+        return _redirect_back(request, printer)
     printer.awaiting_removal = False
     printer.save(update_fields=["awaiting_removal"])
 
@@ -313,6 +318,11 @@ def plate_cleared(request, pk):
         job.defect_reason = defect_reason if quality == PrintJob.Quality.DEFECT else ""
         job.defect_note = defect_note if quality == PrintJob.Quality.DEFECT else ""
         job.save(update_fields=["quality", "defect_reason", "defect_note"])
+
+    if job:
+        from core.stock import receive_output
+
+        receive_output(job, request.user)
 
     audit.log(
         request,

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}<div class="panel" style="max-width:720px"><form method="post">{% csrf_token %}
+{% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+<div class="form">{% for field in form %}{% include "_field.html" with field=field %}{% endfor %}</div>
+<div class="form-actions">{% if draftable %}<button class="btn" name="save" value="draft" type="submit">Сохранить черновик</button>{% endif %}<button class="btn pri" type="submit">{% if draftable %}Провести{% else %}Сохранить{% endif %}</button><a class="btn" href="{% url 'stock' %}">На склад</a></div>
+</form></div>{% endblock %}

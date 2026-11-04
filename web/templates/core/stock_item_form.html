@@ -8,7 +8,7 @@
   <div class="form">
     {% for field in form %}{% include "_field.html" with field=field %}{% endfor %}
   </div>
-  <p class="hint">Остаток и минимальный остаток пока меняются здесь вручную — автосписание по печати появится отдельной задачей.</p>
+  <p class="hint">Для катушек вес меняется документами и автоматическим учётом печатей. Закупочная цена указывается за заданное количество; цену конкретной катушки задайте при её приходе.</p>
   <div class="form-actions"><button class="btn pri" type="submit">Сохранить</button><a class="btn" href="{% url 'stock' %}">Отмена</a></div>
 </form>
 {% endblock %}

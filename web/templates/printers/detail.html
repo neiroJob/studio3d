@@ -10,6 +10,7 @@
   <a href="?tab=history" class="{% if tab == 'history' %}on{% endif %}">История</a>
   <a href="?tab=hours" class="{% if tab == 'hours' %}on{% endif %}">Наработка</a>
   {% if "printers_manage" in rights %}<a href="{% url 'printer_edit' printer.pk %}">Настройки</a>{% endif %}
+  {% if can_control %}<a href="{% url 'stock_setup' printer.pk %}">Катушка и выпуск</a>{% endif %}
 </div>
 
 {% if tab == "now" %}

@@ -1,4 +1,5 @@
 {% load printers_tags %}{% with s=state p=printer %}
+{% if s.stock_warning %}<div class="msg error">Склад: {{ s.stock_warning }}{% if can_control %} <a href="{% url 'stock_setup' p.pk %}">Катушка и выпуск</a>{% endif %}</div>{% endif %}
 <div class="panel" style="--c:var({{ s.color }})">
   <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
   {% if s.faults %}<div class="msg error" style="margin-bottom:10px"><b>Неисправности</b>{% for fault in s.faults %}<div>{{ fault }}</div>{% endfor %}

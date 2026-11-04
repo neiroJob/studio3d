@@ -21,7 +21,7 @@ Studio3D делается по этапам: каждый заканчивает
 | --- | --- | --- |
 | [CRM](#crm) | Customers, contacts, orders, kanban board, files, documents, search | 🟡 in progress |
 | [Money / Деньги](#деньги) | Price calculator and quotes, payments and debts, document templates | ⚪ planned |
-| [Stock / Склад](#склад) | Filament spools with automatic consumption, parts, finished goods, purchasing, QR labels | 🟢 in progress — groups and items framework |
+| [Stock / Склад](#склад) | Filament spools with automatic consumption, parts, finished goods, purchasing, QR labels | 🟢 in progress — spools, automatic accounting and reorder links; physical acceptance pending |
 | [Product catalog / Изделия](#изделия) | Products with a proven print "recipe", one-click repeat orders | ⚪ planned |
 | [Production / Производство](#производство) | Print queue and scheduler, nozzle and spool per printer, AI failure detection | ⚪ planned |
 | [Android and cameras / Android и камеры](#android-и-камеры) | Android operator client, snapshots, streaming and timelapses | 🟡 Android 0.1.0, further camera work planned |
@@ -78,13 +78,16 @@ Studio3D делается по этапам: каждый заканчивает
 - Группы и позиции добавляются через админку: пластик, сопла, запчасти, расходники, готовые изделия.
 - Катушка: тип (PLA, PETG, ABS, ASA, PA-CF, TPU…), цвет, производитель, диаметр, вес нетто и вес пустой
   катушки, остаток в граммах, место хранения, в каком принтере стоит.
-- Автосписание: после печати вес из G-code списывается с катушки этого принтера; при отмене — фактический
-  расход по метрам нити и плотности.
+- Автосписание (реализовано в dev): при успехе вес всего задания из слайсера; при ошибке/отмене —
+  пропорционально времени печати без нагрева/пауз, максимум полный вес. Администратор уточняет расход.
+  При недостаточных данных — явная проверка. Готовый выпуск поступает после «Снял изделие».
 - «Хватит ли пластика»: при запуске печати сравнение нужного веса с остатком и предупреждение.
 - Расходники и запчасти: количество, минимальный остаток, уведомление при нехватке.
 - Готовые изделия заказчиков: не забрали, напечатано сверх заказа, возврат. При новом заказе:
   «на складе 2, допечатать 3».
-- Закупки: позиции ниже минимума попадают в список закупки; средняя цена грамма по фактическим закупкам.
+- Пополнение (dev): позиции ниже минимума по свободному остатку, цена за количество, поставщик,
+  ссылка на товар. Стоимость пластика в печати — по цене конкретной катушки на момент запуска.
+  Заказы поставщикам и средняя оценка запасов остаются отдельными задачами.
 - Наклейки с QR-кодами на катушки, коробки и изделия: сканирование телефоном — поставить в принтер,
   переместить, списать.
 - Сушка пластика: когда катушку сушили, напоминания для гигроскопичных материалов (PA, PETG, TPU).

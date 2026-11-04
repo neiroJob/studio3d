@@ -149,12 +149,6 @@ def journal(request):
 # --- Склад -------------------------------------------------------------------------------------
 
 
-@right_required("stock_income", "stock_writeoff")
-def stock(request):
-    groups = StockGroup.objects.prefetch_related("items")
-    return render(request, "core/stock.html", {"groups": groups})
-
-
 @right_required("stock_income")
 def stock_group_edit(request, pk=None):
     group = get_object_or_404(StockGroup, pk=pk) if pk else None
@@ -187,7 +181,13 @@ def stock_item_edit(request, pk=None):
     item = get_object_or_404(StockItem, pk=pk) if pk else None
     form = StockItemForm(request.POST or None, instance=item)
     if request.method == "POST" and form.is_valid():
-        saved = form.save()
+        with transaction.atomic():
+            if item:
+                locked = StockItem.objects.select_for_update().get(pk=item.pk)
+                if locked.spools.exists():
+                    form.instance.quantity = locked.quantity
+                    form.instance.unit = locked.unit
+            saved = form.save()
         action = audit.Action.STOCK_ITEM_UPDATE if item else audit.Action.STOCK_ITEM_CREATE
         audit.log(request, action, target=saved.name, quantity=str(saved.quantity))
         messages.success(request, f"Позиция «{saved.name}» сохранена.")
@@ -199,6 +199,13 @@ def stock_item_edit(request, pk=None):
 @require_POST
 def stock_item_archive(request, pk):
     item = get_object_or_404(StockItem, pk=pk)
+    if not item.is_archived and (
+        item.reserved_grams() or item.spools.filter(installed_on__isnull=False).exists()
+    ):
+        messages.error(
+            request, "Позиция зарезервирована или катушка установлена на принтер. Сначала освободите её."
+        )
+        return redirect("stock")
     item.is_archived = not item.is_archived
     item.save(update_fields=["is_archived"])
     audit.log(request, audit.Action.STOCK_ITEM_ARCHIVE, target=item.name, is_archived=item.is_archived)

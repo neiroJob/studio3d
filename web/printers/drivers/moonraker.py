@@ -147,6 +147,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
             "remaining": round(remaining) if remaining is not None else None,
             "filament_mm": round(float(stats.get("filament_used") or 0), 1),
             "filament_g_total": meta.get("filament_weight_total"),
+            "estimated_seconds": meta.get("estimated_time"),
         }
 
     light = None
