@@ -1,4 +1,4 @@
-"""Свежие JPEG для Telegram, включая нативные WebRTC-камеры Creality."""
+"""Свежие JPEG для мобильного API, включая нативные WebRTC-камеры Creality."""
 
 import asyncio
 import base64
@@ -38,7 +38,7 @@ async def webrtc_frame(page_url):
     # Протокол взят из HTML /:8000 самого принтера: base64 JSON offer/answer.
     from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
-    stun = getattr(settings, "TELEGRAM_CAMERA_STUN", "")
+    stun = getattr(settings, "CAMERA_STUN", "")
     peer = RTCPeerConnection(RTCConfiguration(iceServers=[RTCIceServer(urls=stun)] if stun else []))
     future = asyncio.get_running_loop().create_future()
     tasks = []
@@ -175,5 +175,5 @@ class PhotoProvider:
             except PhotoUnavailable:
                 raise
             except Exception as error:
-                # Не передавать в Telegram адреса/ответы устройства или внутренний стек.
+                # Не передавать в API адреса/ответы устройства или внутренний стек.
                 raise PhotoUnavailable("Не удалось получить кадр камеры") from error

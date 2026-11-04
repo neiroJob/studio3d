@@ -37,7 +37,6 @@ jobs:
           sed -i 's/^SECRET_KEY=.*/SECRET_KEY=ci/; s/^DATABASE_PASSWORD=.*/DATABASE_PASSWORD=ci/' .env
           docker compose config -q
           docker compose -f docker-compose.yml -f docker-compose.dev.yml config -q
-          docker compose -f docker-compose.yml -f docker-compose.telegram-lan.yml config -q
       - name: Сборка и запуск
         run: |
           mkdir -p backups

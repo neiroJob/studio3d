@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import mobile_api, telegram_views, views, views_crm
+from . import mobile_api, views, views_crm
 
 urlpatterns = [
     path("api/mobile/v1/login/", mobile_api.login, name="mobile_login"),
@@ -12,21 +12,6 @@ urlpatterns = [
     path("api/mobile/v1/printers/<int:pk>/light/", mobile_api.light, name="mobile_light"),
     path("", views.dashboard, name="dashboard"),
     path("healthz", views.healthz, name="healthz"),
-    path("integrations/telegram/", telegram_views.manage, name="telegram_settings"),
-    path("integrations/telegram/bot/<str:action>/", telegram_views.lifecycle, name="telegram_lifecycle"),
-    path(
-        "integrations/telegram/recipients/add/", telegram_views.recipient_edit, name="telegram_recipient_add"
-    ),
-    path(
-        "integrations/telegram/recipients/<int:pk>/",
-        telegram_views.recipient_edit,
-        name="telegram_recipient_edit",
-    ),
-    path("integrations/telegram/recipients/<int:pk>/pair/", telegram_views.pairing, name="telegram_pairing"),
-    path("integrations/telegram/recipients/<int:pk>/unlink/", telegram_views.unlink, name="telegram_unlink"),
-    path(
-        "integrations/telegram/recipients/<int:pk>/test/", telegram_views.test_recipient, name="telegram_test"
-    ),
     path("setup/", views.setup, name="setup"),
     path("settings/", views.studio_settings, name="settings"),
     path("journal/", views.journal, name="journal"),

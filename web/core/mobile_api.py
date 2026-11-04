@@ -23,9 +23,9 @@ from printers.models import Printer, PrinterFault
 from printers.state import read_state, view_state, write_state
 
 from . import audit
+from .camera_photos import PhotoProvider, PhotoUnavailable
 from .mobile_models import MobileSession
 from .models import StudioSettings
-from .telegram_photos import PhotoProvider, PhotoUnavailable
 
 
 def error(message, status):

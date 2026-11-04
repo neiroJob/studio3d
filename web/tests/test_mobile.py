@@ -11,8 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.roles import ROLE_MANAGER, ROLE_OPERATOR
+from core.camera_photos import CameraPhoto, PhotoUnavailable
 from core.mobile_models import MobileSession
-from core.telegram_photos import CameraPhoto, PhotoUnavailable
 from printers.drivers import base
 from printers.models import Printer
 from printers.state import write_state

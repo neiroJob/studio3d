@@ -13,7 +13,7 @@ Studio3D делается по этапам: каждый заканчивает
 | --- | --- | --- |
 | 1 | Specification and clickable prototype / ТЗ и кликабельный прототип | 🟡 in review |
 | 2 | Foundation: Docker, Django, roles, login, first-run wizard, backups / Каркас | ✅ 0.1.0 |
-| 3 | Printers: drivers, adding printers, dashboard, print control, files, history, machine hours / Принтеры | 🟢 in progress — QIDI Q1 Pro, Creality K1 and K1C verified; Plus 4 partially verified (branch `dev`) |
+| 3 | Printers: drivers, adding printers, dashboard, print control, files, history, machine hours / Принтеры | 🟢 in progress — QIDI Q1 Pro, Creality K1 and K1C verified; Plus 4 partially verified |
 
 ## Planned blocks / Запланированные блоки
 
@@ -21,10 +21,10 @@ Studio3D делается по этапам: каждый заканчивает
 | --- | --- | --- |
 | [CRM](#crm) | Customers, contacts, orders, kanban board, files, documents, search | 🟡 in progress |
 | [Money / Деньги](#деньги) | Price calculator and quotes, payments and debts, document templates | ⚪ planned |
-| [Stock / Склад](#склад) | Filament spools with automatic consumption, parts, finished goods, purchasing, QR labels | 🟢 in progress — groups and items framework (branch `dev`) |
+| [Stock / Склад](#склад) | Filament spools with automatic consumption, parts, finished goods, purchasing, QR labels | 🟢 in progress — groups and items framework |
 | [Product catalog / Изделия](#изделия) | Products with a proven print "recipe", one-click repeat orders | ⚪ planned |
 | [Production / Производство](#производство) | Print queue and scheduler, nozzle and spool per printer, AI failure detection | ⚪ planned |
-| [Bot and cameras / Бот и камеры](#бот-и-камеры) | Telegram and Max bots, snapshots, timelapses, alerts | ⚪ planned |
+| [Android and cameras / Android и камеры](#android-и-камеры) | Android operator client, snapshots, streaming and timelapses | 🟡 Android 0.1.0, further camera work planned |
 | [Statistics / Статистика](#статистика) | Printed items, materials, defects, printer utilisation | ⚪ planned |
 | [For customers / Для клиентов](#для-клиентов) | Order status link, request form / website widget | ⚪ planned |
 | [More printers / Ещё принтеры](#ещё-принтеры) | QIDI Q2, Elegoo Neptune 4 Max, printer discovery | ⚪ planned |
@@ -102,15 +102,12 @@ Studio3D делается по этапам: каждый заканчивает
   «PA-CF без закалённого сопла»).
 - Контроль брака по камере: локальная модель находит «спагетти» и отрыв детали, ставит на паузу, шлёт фото в бот.
 
-## Бот и камеры
+## Android и камеры
 
-- Telegram-бот первым (работает без белого IP), Max — вторым модулем по тому же шаблону.
-- Оператору: фото с камеры раз в N минут во время печати; старт, окончание, расчётное время; пауза и ошибки
-  с пояснением; «ждёт снятия»; «пластик заканчивается»; нехватка расходников.
-- Команды: `/status`, фото по запросу, пауза и отмена — только для разрешённых ролей.
-- Бот отвечает только привязанным пользователям системы.
-- Камеры: снимки по расписанию, живое видео, таймлапсы.
-- Позже, отдельной опцией: уведомления клиентам («заказ готов»).
+- Android 0.1.0: обзор студии, состояния, снимки, история/наработка, текущие неисправности и свет.
+- По решению пользователя push-уведомлений пока нет. Telegram-бот удалён 04.11.2026.
+- Далее: внешний HTTPS-доступ, реальная проверка на телефоне, стабильная release-подпись.
+- Камеры: довести серверный кадр WebRTC K1C, затем живое видео и таймлапсы.
 
 ## Статистика
 

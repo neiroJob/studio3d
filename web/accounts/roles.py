@@ -26,7 +26,7 @@ RIGHTS = [
     ("maint_configure", "ТО: настройка интервалов"),
     ("maint_done", "ТО: отметить выполнение"),
     ("devices_manage", "Устройства и автоматика"),
-    ("integrations_manage", "Telegram, ИИ-провайдеры, расширения"),
+    ("integrations_manage", "ИИ-провайдеры и расширения"),
     ("users_manage", "Пользователи и роли, журнал действий"),
     ("studio_settings", "Настройки студии и резервные копии"),
 ]

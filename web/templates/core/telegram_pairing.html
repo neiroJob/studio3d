@@ -1,6 +1,0 @@
-{% extends "base.html" %}{% block title %}Привязка Telegram{% endblock %}{% block heading %}Привязка Telegram{% endblock %}
-{% block content %}<div class="panel"><h2>{{ recipient.name }}</h2><p>Код действует <b>10 минут</b>, один раз. Новый код отменяет предыдущий. Передайте его только нужному сотруднику или отправьте в нужной группе.</p>
-{% if deep_link %}<p><a class="btn pri" href="{{ deep_link }}" target="_blank" rel="noopener">Открыть бота и привязать чат</a></p>{% endif %}
-<p>В {% if recipient.kind == 'group' %}группе, куда добавлен бот{% else %}личном чате с ботом{% endif %} отправьте:</p><pre>{% if recipient.kind == 'group' %}/pair{% else %}/start{% endif %} {{ token }}</pre>
-{% if username %}<p>Бот: @{{ username }}</p>{% else %}<p>Имя бота появится после запуска сервиса с токеном. Пока откройте бота по имени, выданному BotFather.</p>{% endif %}
-<p><a href="{% url 'telegram_settings' %}">Вернуться к получателям</a></p></div>{% endblock %}

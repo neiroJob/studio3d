@@ -39,40 +39,36 @@ own server inside the studio network — no cloud account, no subscription, noth
 >
 > The user interface is in Russian today; English UI is on the roadmap.
 
-## Telegram operator bot (`dev`)
+## Android operator app
 
-An Android operator client is being developed on `dev`: [installation and build guide](android/README.md).
-Kotlin/Compose, no push notifications. Update the server for the mobile API; off-site access requires
-an external HTTPS endpoint, which has not been configured. No studio address or credentials are bundled.
+`main` includes a native **Kotlin + Jetpack Compose** client for Android 8.0+:
+all printers, live status/remaining time, snapshots, temperatures/filament, history, machine hours,
+active faults and idle heating warnings. The only printer control in the app is light on/off.
+There are no push notifications; status refreshes while the app is open and snapshots refresh manually.
 
-The bot reports print start/end, pauses, faults/runout and lost/restored connections, with periodic photos
-and status every N minutes during printing. It can remind operators to remove finished parts.
-Private chats, groups, printer scope, events and intervals are configured under **Administration → Telegram**.
-Commands provide status/remaining time, photos, recent history and machine hours. The only printer control is light on/off.
+1. Update the server from `main`: `git switch main`, then `bash update.sh`.
+2. Download **Studio3D-Android** from a successful [Android workflow](https://github.com/neiroJob/studio3d/actions/workflows/android.yml).
+   GitHub sign-in is required. The ZIP contains the APK and SHA256SUMS.txt, retained for 30 days.
+3. Install the APK, enter the server address and sign in with an existing Studio3D account.
+   Local HTTP requires an explicit opt-in. Passwords are not stored; the session/cache use Android Keystore.
 
-1. Open the official [@BotFather](https://t.me/BotFather), send `/newbot`, choose a name and a unique username ending in `bot`.
-2. Enter the token under **Administration → Telegram**, save settings and click **Start bot**. The token is stored encrypted and never displayed again. Replace/remove it here; an empty field keeps the existing token.
-3. Install this version once with `bash update.sh` on `dev`. After installation, token changes and Start/Stop work from the admin UI without terminal commands or container restarts. The background bot service must remain running.
-   No inbound port or public webhook is required. Use a dedicated bot; existing webhooks are not removed automatically.
-4. Add a recipient in Administration → Telegram. For a private chat select an active project user with dashboard access;
-   for a group choose the group type. Select printers or leave the selection empty for all printers.
-5. Generate a single-use pairing code (10-minute expiry). The employee opens the private link and presses Start.
-   For a group, add the bot with message/photo permissions and send `/pair@bot_username CODE` inside that group.
-   Privacy mode can stay enabled. Group members can query status; light control additionally requires a bound private
-   account with the project's print-control permission and access to that printer in both scopes.
-6. Click Test, verify the message and delivery log, then enable notifications and select private/group/both delivery.
-   An interval of 0 disables periodic photos or repeated removal reminders, respectively.
+This is an internal debug build; stable distribution needs a persistent release signing key.
+Different CI builds may require uninstalling the previous debug version. A separate demo works without equipment.
+See [installation, build and API details](android/README.md).
+Off-site access needs an external HTTPS endpoint, which has not been configured. Printer addresses and keys
+stay on the server. Server-side K1C/WebRTC snapshots still require hardware verification.
 
-Use `/status`, `/status ID`, `/photo ID`, `/alerts`, `/history ID`, `/hours ID`, `/light ID on`,
-`/light ID off`, `/mute`, `/unmute`, `/help`, or the printer buttons. Print start/pause/cancel/heating controls
-and confirming part removal are deliberately unavailable. Revoking the project user's access revokes bot access.
+## Updating after Telegram removal
 
-Photos are uploaded by the server; Telegram never needs access to LAN camera URLs. Camera failure produces an
-explicit text-only notification. The durable database queue retries network failures and Telegram rate limits;
-delivery may be delayed or duplicated if a network acknowledgement is lost. The bot is a monitoring channel.
-Actual Telegram delivery requires creating and configuring the bot first. K1C WebRTC frame capture still needs
-verification from the installation server; it has not passed the live test from the development environment.
-See the detailed [setup and troubleshooting guide (Russian)](docs/telegram.md), also explained in the admin UI.
+The Telegram bot was removed on 2026-11-04: no bot service, admin pages or notification code remains.
+Shared camera capture is preserved for Android. Migration `core 0013` deletes bot tables, including its
+stored token and chat bindings; printer history, CRM and mobile sessions are preserved.
+Historical migrations `0010`/`0011` remain so deployed databases can upgrade correctly.
+
+Back up the database before updating. If `.env` uses `COMPOSE_FILE` with the old
+`docker-compose.telegram-lan.yml`, remove only that override from the list. Obsolete `TELEGRAM_*` settings
+can be removed; optional camera STUN now uses `CAMERA_STUN`.
+`bash update.sh` applies migrations and removes the obsolete bot container with `--remove-orphans`.
 
 ## Screenshots
 
@@ -117,7 +113,7 @@ All screenshots use synthetic demo data (`python manage.py demo_data`); they con
 CRM: customers with legal details and contacts, orders with files (3mf, G-code, STL), receipts and contracts,
 kanban board, global search · price calculator and quotes, payments · stock: filament spools with automatic
 consumption after each print, parts, finished goods, purchasing, QR labels · product catalog with print recipes ·
-print queue and scheduler, AI failure detection · Telegram and Max bots with camera snapshots and alerts ·
+print queue and scheduler, AI failure detection · camera streaming and timelapses ·
 statistics · order status link and request form for customers · more printer models · maintenance · MQTT devices ·
 off-site backups · English UI. The order is not fixed yet. Full plan: [ROADMAP.md](ROADMAP.md).
 

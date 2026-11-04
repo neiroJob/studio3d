@@ -32,12 +32,6 @@ def _key(printer_id):
 def write_state(printer_id, state):
     _persist_faults(printer_id, state)
     cache.set(_key(printer_id), state, timeout=STATE_TTL)
-    try:
-        from core.telegram_events import record_state
-
-        record_state(printer_id, state)
-    except Exception:
-        log.exception("Could not record Telegram state for printer %s", printer_id)
 
 
 def _persist_faults(printer_id, state):

@@ -74,13 +74,6 @@ def _save_job(printer_id, job, live):
     )
     if live and status == PrintJob.Status.COMPLETED:
         Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
-    try:
-        from core.telegram_events import record_finished
-
-        with transaction.atomic():
-            record_finished(printer, dict(job, external_id=external_id), live)
-    except Exception:
-        log.exception("Could not record Telegram finish for printer %s", printer_id)
     return created
 
 
