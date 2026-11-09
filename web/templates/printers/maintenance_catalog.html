@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Виды обслуживания{% endblock %}
+{% block heading %}Виды обслуживания{% endblock %}
+{% block content %}
+<div class="stack">
+  <form method="post" class="panel stack">
+    {% csrf_token %}
+    <h2>{% if action %}Изменить вид работы{% else %}Добавить вид работы{% endif %}</h2>
+    {{ form.non_field_errors }}
+    <div class="form">{% for field in form %}{% include "_field.html" with field=field %}{% endfor %}</div>
+    <p class="hint">При включённом списании выберите группу для ограничения расходников. Пустая группа оставляет доступными все подходящие позиции склада.</p>
+    <div class="row"><button class="btn pri" type="submit">Сохранить</button>{% if action %}<a class="btn" href="{% url 'maintenance_catalog' %}">Отмена</a>{% endif %}</div>
+  </form>
+  <div class="panel tbl-wrap"><table>
+    <tr><th>Вид работы</th><th>Расходники</th><th>Доступность</th><th></th></tr>
+    {% for row in actions %}
+    <tr><td>{{ row.name }}</td><td>{% if row.requires_stock %}{{ row.stock_group|default:"Все подходящие позиции" }}{% else %}Без списания{% endif %}</td>
+      <td>{{ row.enabled|yesno:"Доступно,Отключено" }}</td>
+      <td><a href="{% url 'maintenance_catalog_edit' row.pk %}">Изменить</a></td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

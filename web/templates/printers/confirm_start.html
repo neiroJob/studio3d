@@ -10,6 +10,7 @@
     <a class="btn pri" href="{% url 'printer_detail' printer.pk %}?tab=files">Не запускать</a>
     <form class="inline" method="post" action="{% url 'printer_start' printer.pk %}" data-busy="Печать ставится…">{% csrf_token %}
       <input type="hidden" name="filename" value="{{ filename }}"><input type="hidden" name="confirm" value="1">
+      {% if spool_id %}<input type="hidden" name="spool" value="{{ spool_id }}">{% endif %}
       <button class="btn warn" type="submit">Всё равно запустить</button></form>
   </div>
 </div>

@@ -1,8 +1,10 @@
 from django.urls import path
 
-from . import views
+from . import maintenance, views
 
 urlpatterns = [
+    path("settings/maintenance/", maintenance.maintenance_catalog, name="maintenance_catalog"),
+    path("settings/maintenance/<int:pk>/", maintenance.maintenance_catalog, name="maintenance_catalog_edit"),
     path("printers/tiles/", views.tiles, name="printer_tiles"),
     path("printers/add/", views.add, name="printer_add"),
     path("printers/check/", views.check, name="printer_check"),
@@ -23,6 +25,7 @@ urlpatterns = [
     path("printers/<int:pk>/files/delete/", views.file_delete, name="printer_file_delete"),
     path("printers/<int:pk>/files/rename/", views.file_rename, name="printer_file_rename"),
     path("printers/<int:pk>/cleared/", views.plate_cleared, name="printer_cleared"),
+    path("printers/<int:pk>/maintenance/", maintenance.maintenance, name="printer_maintenance"),
     path("printers/<int:pk>/light/<str:mode>/", views.light, name="printer_light"),
     path("printers/<int:pk>/<str:action>/", views.command, name="printer_command"),
 ]

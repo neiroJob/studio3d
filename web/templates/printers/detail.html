@@ -8,6 +8,7 @@
   <a href="?tab=now" class="{% if tab == 'now' %}on{% endif %}">Сейчас</a>
   {% if can_control %}<a href="?tab=files" class="{% if tab == 'files' %}on{% endif %}">Файлы</a>{% endif %}
   <a href="?tab=history" class="{% if tab == 'history' %}on{% endif %}">История</a>
+  <a href="{% url 'printer_maintenance' printer.pk %}">Обслуживание</a>
   <a href="?tab=hours" class="{% if tab == 'hours' %}on{% endif %}">Наработка</a>
   {% if "printers_manage" in rights %}<a href="{% url 'printer_edit' printer.pk %}">Настройки</a>{% endif %}
   {% if can_control %}<a href="{% url 'stock_setup' printer.pk %}">Катушка и выпуск</a>{% endif %}
@@ -24,20 +25,21 @@
 </div>
 {% if "print_plate" in rights %}
 <dialog id="plate-dialog-{{ printer.pk }}" class="plate-dialog">
-  <form method="post" action="{% url 'printer_cleared' printer.pk %}" data-busy="Изделие снимается…">
+  <form method="post" action="{% url 'printer_cleared' printer.pk %}" data-busy="Изделие снимается…" data-plate-quality>
     {% csrf_token %}
     <h2 style="margin:0 0 10px">Изделие снято — как прошла печать?</h2>
-    <label class="check"><input type="radio" name="quality" value="ok" checked> Без замечаний</label>
-    <label class="check"><input type="radio" name="quality" value="defect"> Брак</label>
+    <label class="check"><input type="radio" name="quality" value="ok" required> Без замечаний</label>
+    <label class="check"><input type="radio" name="quality" value="defect" required> Брак</label>
     <div class="defect-fields">
-      <label class="small muted">Причина</label>
-      <select name="defect_reason">{% for value, label in defect_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
-      <label class="small muted">Комментарий (необязательно)</label>
-      <textarea name="defect_note" rows="3"></textarea>
+      <label class="small muted" for="defect-reason">Причина</label>
+      <select id="defect-reason" name="defect_reason"><option value="">Выберите причину</option>{% for value, label in defect_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
+      <label class="small muted" for="defect-note">Комментарий</label>
+      <textarea id="defect-note" name="defect_note" rows="3" aria-describedby="defect-note-help"></textarea>
+      <small id="defect-note-help" class="muted">Для «Другое» и «Неисправность принтера» комментарий обязателен.</small>
     </div>
     <div class="form-actions" style="margin-top:14px">
       <button type="button" class="btn" data-close-dialog>Отмена</button>
-      <button type="submit" class="btn pri">Готово</button>
+      <button type="submit" class="btn pri">Подтвердить снятие</button>
     </div>
   </form>
 </dialog>
@@ -45,6 +47,15 @@
 
 {% elif tab == "files" %}
 <div class="stack">
+  <div class="panel">
+    <label class="field">Пластик для запуска
+      <select data-launch-spool>
+        <option value="">{% if printer.stock_setup.spool %}Текущая · {{ printer.stock_setup.spool }}{% else %}Без выбора катушки{% endif %}</option>
+        {% for spool in launch_spools %}<option value="{{ spool.pk }}">{{ spool }}</option>{% endfor %}
+      </select>
+    </label>
+    <p class="hint">Перед запуском убедитесь, что выбранная катушка установлена на принтер.</p>
+  </div>
   {% if printer|can:"upload" %}
   <form class="panel" method="post" enctype="multipart/form-data" action="{% url 'printer_upload' printer.pk %}"
         data-upload data-progress-url="{% url 'printer_upload_progress' printer.pk 'ID' %}"
@@ -109,7 +120,7 @@
   {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|basename }}</td><td class="num">{{ j.print_duration|duration }}</td>
     <td class="num">{% if j.filament_g %}{{ j.filament_g|floatformat:0 }} г{% else %}{{ j.filament_mm|floatformat:0 }} мм{% endif %}</td>
     <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span>
-      {% if j.quality == "defect" %}<span class="pill c" style="--c:var(--st-err)" title="{{ j.defect_note }}">Брак{% if j.get_defect_reason_display %}: {{ j.get_defect_reason_display }}{% endif %}</span>{% endif %}</td></tr>
+      {% if j.quality == "defect" %}<span class="pill c" style="--c:var(--st-err)" title="{{ j.defect_note }}">Брак{% if j.get_defect_reason_display %}: {{ j.get_defect_reason_display }}{% endif %}</span>{% if j.defect_note %}<div class="small muted">{{ j.defect_note|linebreaksbr }}</div>{% endif %}{% endif %}</td></tr>
   {% empty %}<tr><td colspan="6" class="muted">Заданий с момента подключения пока нет.</td></tr>{% endfor %}
 </table></div>
 

@@ -1,0 +1,10 @@
+<fieldset class="panel stack" data-work-line>
+  <legend>Работа</legend>
+  {{ line.non_field_errors }}
+  {% include "_field.html" with field=line.action %}
+  <div class="form" data-work-material>
+    {% include "_field.html" with field=line.item %}
+    {% include "_field.html" with field=line.quantity %}
+  </div>
+  <label class="check">{{ line.DELETE }} Убрать работу</label>
+</fieldset>

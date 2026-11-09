@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% load printers_tags static %}
+{% block title %}Обслуживание · {{ printer.name }}{% endblock %}
+{% block heading %}Обслуживание · {{ printer.name }}{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="row">
+    <a class="btn" href="{% url 'printer_detail' printer.pk %}">К принтеру</a>
+    <a class="btn" href="{% url 'printer_detail' printer.pk %}?tab=history">История печатей</a>
+    <span class="muted">Текущая наработка · {{ printer.print_seconds|hours }} ч</span>
+  </div>
+  {% if can_record %}
+  <details class="panel" {% if form.is_bound %}open{% endif %}>
+    <summary>Обслужить</summary>
+    <form method="post" class="stack" data-maintenance data-busy="Сохраняется…">
+      {% csrf_token %}
+      {{ form.request_id }}{{ form.request_id.errors }}{{ form.non_field_errors }}
+      {{ lines.management_form }}{{ lines.non_form_errors }}
+      <div class="stack" data-work-lines>
+        {% for line in lines %}{% include "printers/_maintenance_line.html" %}{% endfor %}
+      </div>
+      <template data-work-template>{% include "printers/_maintenance_line.html" with line=lines.empty_form %}</template>
+      <div><button type="button" class="btn" data-add-work>+ Добавить работу</button></div>
+      {% include "_field.html" with field=form.note %}
+      <div class="hint" data-work-preview aria-live="polite"></div>
+      <div><button type="submit" class="btn pri">Записать обслуживание</button></div>
+    </form>
+    {{ work_catalog|json_script:"maintenance-actions" }}
+    {{ work_stock|json_script:"maintenance-stock" }}
+    <script src="{% static 'js/maintenance.js' %}" defer></script>
+  </details>
+  {% endif %}
+  <div class="panel">
+    <h2>Журнал обслуживания</h2>
+    {% for event in events %}
+      <article>
+        <h3>{{ event }} · {{ event.recorded_at|date:"d.m.Y H:i" }}</h3>
+        <p class="muted">{{ event.operator }} · наработка {{ event.print_seconds|hours }} ч</p>
+        <ul>
+          {% for line in event.lines.all %}
+          <li>{{ line.action_name }}{% if line.document %} · {{ line.item_name }} · {{ line.document.quantity }} {{ line.document.unit }} · документ склада №{{ line.document_id }}{% endif %}
+            {% if line.interval_seconds != None %}<span class="muted">· {{ line.interval_seconds|hours }} ч с предыдущей такой работы</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% if event.note %}<p>{{ event.note|linebreaksbr }}</p>{% endif %}
+      </article>
+      {% if not forloop.last %}<hr>{% endif %}
+    {% empty %}<p class="muted">Записей об обслуживании пока нет.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

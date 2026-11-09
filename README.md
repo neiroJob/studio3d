@@ -191,6 +191,13 @@ is in [README.ru.md](README.ru.md) (Russian).
 - Login throttling per IP, CSRF protection, audit log of every printer command.
 - Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
+## Print removal and maintenance
+
+- Record print quality in the existing part removal dialog. A defect requires a reason, and the “Other” and “Printer fault” reasons also require a comment.
+- Open the printer's Maintenance page to log one or more completed jobs. Select the exact stock items and quantities used. The log stores the printer's current print-hour reading, and stock documents are posted in the same transaction.
+- Administrators can edit the maintenance catalog and optionally restrict each stock-consuming job to a stock group.
+- On the Files tab, choose the installed spool before starting a file or uploading with immediate start. Different jobs can use different materials under the existing one-spool-per-printer accounting model.
+
 ## Automatic warehouse
 
 The existing Stock page now includes balances/reservations, individual filament spools,

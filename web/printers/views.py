@@ -1,9 +1,11 @@
 import json
 import re
 import time
+from contextlib import contextmanager
 
 from django.contrib import messages
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,6 +16,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.roles import right_required, user_rights
 from core import audit
+from core.stock_models import PrinterStockSetup, PrintStockRun, Spool
 
 from .drivers import DriverError, base, client_for
 from .drivers.moonraker import fetch_snapshot, page_reachable
@@ -136,6 +139,12 @@ def detail(request, pk):
         except DriverError as e:
             ctx["files_error"] = str(e)
         ctx["upload_form"] = UploadForm()
+        ctx["launch_spools"] = (
+            Spool.objects.filter(item__is_archived=False, remaining_g__gt=0)
+            .exclude(installed_on__printer_id__in=Printer.objects.exclude(pk=pk))
+            .select_related("item")
+            .order_by("item__name", "code")
+        )
         recovery_path = printer.profile.power_loss_recovery if printer.profile else ""
         if recovery_path:
             try:
@@ -301,16 +310,22 @@ def plate_cleared(request, pk):
     if not printer.awaiting_removal:
         messages.info(request, "Снятие изделия уже учтено.")
         return _redirect_back(request, printer)
-    printer.awaiting_removal = False
-    printer.save(update_fields=["awaiting_removal"])
-
     quality = request.POST.get("quality") or ""
     if quality not in PrintJob.Quality.values:
         quality = ""
     defect_reason = request.POST.get("defect_reason") or ""
+    defect_note = request.POST.get("defect_note", "").strip()
+    if quality == PrintJob.Quality.DEFECT:
+        if defect_reason not in PrintJob.DefectReason.values:
+            messages.error(request, "Выберите причину брака в окне снятия изделия.")
+            return redirect("printer_detail", pk=pk)
+        if defect_reason in {"other", "printer_failure"} and not defect_note:
+            messages.error(request, "Добавьте комментарий к выбранной причине брака.")
+            return redirect("printer_detail", pk=pk)
+    printer.awaiting_removal = False
+    printer.save(update_fields=["awaiting_removal"])
     if defect_reason not in PrintJob.DefectReason.values:
         defect_reason = ""
-    defect_note = request.POST.get("defect_note", "").strip()
     # Последнее завершённое задание без оценки — то самое, что только что сняли со стола.
     job = printer.jobs.filter(status=PrintJob.Status.COMPLETED, quality="").order_by("-ended_at").first()
     if quality and job:
@@ -349,11 +364,37 @@ def _state_blocks_start(printer):
     return ""
 
 
+@contextmanager
+def _launch_material(printer, spool_id):
+    if not spool_id:
+        yield
+        return
+    if not re.fullmatch(r"[1-9][0-9]{0,17}", spool_id):
+        raise ValidationError("Выберите катушку со склада.")
+    with transaction.atomic():
+        locked = Printer.objects.select_for_update().get(pk=printer.pk)
+        blocked = _state_blocks_start(locked)
+        if blocked or PrintStockRun.objects.filter(printer=locked, state="active").exists():
+            raise ValidationError(blocked or "Принтер занят: идёт печать.")
+        spool = Spool.objects.select_for_update().filter(pk=spool_id).first()
+        if not spool or spool.remaining_g <= 0 or spool.item.is_archived:
+            raise ValidationError("Катушка недоступна или закончилась. Выберите другую.")
+        if PrinterStockSetup.objects.filter(spool=spool).exclude(printer=locked).exists():
+            raise ValidationError("Катушка уже установлена на другой принтер.")
+        setup, _ = PrinterStockSetup.objects.get_or_create(printer=locked)
+        if setup.order_item_id and setup.order_item.plastic_id != spool.item_id:
+            raise ValidationError("Материал не совпадает с заказом. Проверьте раздел «Катушка и выпуск».")
+        setup.spool = spool
+        setup.save(update_fields=["spool"])
+        yield
+
+
 @right_required("print_control")
 @require_POST
 def start(request, pk):
     printer = get_object_or_404(Printer, pk=pk)
     filename = request.POST.get("filename", "")
+    spool_id = request.POST.get("spool", "")
     confirmed = request.POST.get("confirm") == "1"
     blocked = _state_blocks_start(printer)
     if blocked:
@@ -376,10 +417,14 @@ def start(request, pk):
                     "printer": printer,
                     "filename": filename,
                     "warnings": warnings,
+                    "spool_id": spool_id,
                 },
             )
         try:
-            client_for(printer).start(filename)
+            with _launch_material(printer, spool_id):
+                client_for(printer).start(filename)
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages))
         except DriverError as e:
             messages.error(request, f"{printer.name}: {e}")
         else:
@@ -446,7 +491,10 @@ def upload(request, pk):
                     cache.set(key, {"sent": sent, "total": total}, timeout=600)
 
             try:
-                client_for(printer).upload(f, f.name, start=start_now, progress=progress)
+                with _launch_material(printer, request.POST.get("spool", "") if start_now else ""):
+                    client_for(printer).upload(f, f.name, start=start_now, progress=progress)
+            except ValidationError as e:
+                messages.error(request, " ".join(e.messages))
             except DriverError as e:
                 messages.error(request, f"{printer.name}: {e}")
             else:

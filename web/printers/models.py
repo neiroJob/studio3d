@@ -5,6 +5,7 @@ from django.db.models import Sum
 
 from core.crypto import decrypt, encrypt
 
+from . import maintenance_models  # noqa: F401 -- регистрация моделей обслуживания
 from .profiles import get_profile
 
 
@@ -97,6 +98,11 @@ class PrintJob(models.Model):
         SHIFTED_LAYERS = "shifted_layers", "Смещение слоёв"
         CLOG = "clog", "Забилось сопло"
         POWER_LOSS = "power_loss", "Пропадание питания"
+        UNDER_EXTRUSION = "under_extrusion", "Недоэкструзия, причина не установлена"
+        SURFACE_DIMENSIONS = "surface_dimensions", "Дефект поверхности или размеров"
+        PRINT_SETTINGS = "print_settings", "Ошибка файла или настроек печати"
+        PRINTER_FAILURE = "printer_failure", "Неисправность принтера"
+        UNKNOWN = "unknown", "Причина пока неизвестна"
         OTHER = "other", "Другое"
 
     printer = models.ForeignKey(Printer, on_delete=models.CASCADE, related_name="jobs")

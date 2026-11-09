@@ -140,6 +140,34 @@
   });
 })();
 
+// Один выбор пластика на вкладке используется всеми формами запуска и загрузки.
+(() => {
+  const select = document.querySelector("[data-launch-spool]");
+  if (!select) return;
+  for (const form of document.querySelectorAll('form[data-upload], form[action$="/start/"]')) {
+    form.addEventListener("formdata", (event) => {
+      if (select.value) event.formData.set("spool", select.value);
+    });
+  }
+})();
+
+// Причина и комментарий относятся к оценке в существующем окне снятия.
+(() => {
+  const form = document.querySelector("[data-plate-quality]");
+  if (!form) return;
+  const reason = form.elements.defect_reason;
+  const note = form.elements.defect_note;
+  function update() {
+    const defect = form.elements.quality.value === "defect";
+    reason.required = defect;
+    note.required = defect && ["other", "printer_failure"].includes(reason.value);
+    note.setCustomValidity(note.required && !note.value.trim() ? "Добавьте комментарий." : "");
+  }
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
+  update();
+})();
+
 // Форма принтера: производитель → модель; порт и мощность из профиля; наработка из проверки связи.
 (function () {
   function setup() {
