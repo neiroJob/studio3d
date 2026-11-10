@@ -378,6 +378,8 @@ class CrealityNativeMonitor(base.BaseMonitor):
     не используется (ничем не наполнить).
     """
 
+    has_job_history = False
+
     def __init__(self, *args, session=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.session = session
@@ -484,7 +486,9 @@ class CrealityNativeMonitor(base.BaseMonitor):
             {
                 "external_id": ended["external_id"],
                 "filename": ended["filename"],
-                "status": "completed" if progress >= 0.999 and status != base.ERROR else "cancelled",
+                "status": (
+                    "error" if status == base.ERROR else "completed" if progress >= 0.999 else "cancelled"
+                ),
                 "start_time": ended["start_time"],
                 "end_time": time.time(),
                 "print_duration": ended.get("last_elapsed", 0.0),

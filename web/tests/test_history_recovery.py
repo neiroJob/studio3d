@@ -127,8 +127,9 @@ def test_periodic_history_recovers_without_any_ws_notification(monkeypatch):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_completed_then_fault_keeps_history_and_removal(client):
-    printer = make_printer(history_since=time.time() - 2000)
+@pytest.mark.parametrize("profile_id", ["qidi_q1_pro", "qidi_plus_4", "creality_k1c", "creality_k1"])
+def test_completed_then_fault_keeps_history_and_removal(client, profile_id):
+    printer = make_printer(profile_id=profile_id, history_since=time.time() - 2000)
     user = make_user("operator", ROLE_OPERATOR)
     job = job_from_history(
         {
@@ -152,6 +153,65 @@ def test_completed_then_fault_keeps_history_and_removal(client):
     client.post(reverse("printer_cleared", args=[printer.pk]), {"quality": "ok"})
     async_to_sync(collector.save_job)(printer.pk, job, True)
     printer.refresh_from_db()
+    assert not printer.awaiting_removal
+
+
+@pytest.mark.django_db(transaction=True)
+def test_moonraker_reconnect_matches_observed_print_even_after_fault():
+    now = time.time()
+    printer = make_printer()
+    worker = collector.PrinterWorker(printer, session=None)
+    worker.pending_job_check = {"updated": now - 100, "job": {"filename": "part.gcode"}}
+    job = job_from_history(
+        {"job_id": "one", "filename": "part.gcode", "status": "completed",
+         "start_time": now - 200, "end_time": now - 10, "print_duration": 185}
+    )
+    async_to_sync(worker.on_job)(dict(job, latest_backfill=False), live=False)
+    printer.refresh_from_db()
+    assert not printer.awaiting_removal
+    async_to_sync(worker.on_job)(dict(job, latest_backfill=True), live=False)
+    async_to_sync(worker.on_state)({"status": base.ERROR, "message": "Ошибка после печати"})
+    printer.refresh_from_db()
+    assert printer.awaiting_removal and printer.print_seconds == 185
+
+
+@pytest.mark.django_db(transaction=True)
+def test_native_reconnect_distinguishes_new_print_of_same_file():
+    now = time.time()
+    printer = make_printer(profile_id="creality_k1")
+    worker = collector.PrinterWorker(printer, session=None)
+    worker.pending_job_check = {
+        "status": base.PRINTING, "updated": now - 60,
+        "job": {"filename": "part.gcode", "external_id": "part.gcode@1", "elapsed": 40},
+    }
+    async_to_sync(worker.on_state)({"status": base.SELF_TEST})
+    assert worker.pending_job_check
+    async_to_sync(worker.on_state)(
+        {"status": base.PRINTING, "job": {"filename": "part.gcode", "external_id": "part.gcode@2"}}
+    )
+    job = printer.jobs.get()
+    assert job.status == "interrupted" and job.external_id == "part.gcode@1"
+    assert job.print_duration == 40
+
+
+@pytest.mark.django_db(transaction=True)
+def test_late_completion_cannot_reopen_removal_after_newer_failure():
+    now = time.time()
+    printer = make_printer()
+    save = async_to_sync(collector.save_job)
+    for job_id, status, end in [("new", "error", now - 1), ("old", "completed", now - 100)]:
+        save(
+            printer.pk,
+            job_from_history(
+                {
+                    "job_id": job_id, "filename": "same.gcode", "status": status,
+                    "start_time": end - 60, "end_time": end, "print_duration": 55,
+                }
+            ),
+            True,
+        )
+    printer.refresh_from_db()
+    assert printer.jobs.count() == 2
     assert not printer.awaiting_removal
 
 

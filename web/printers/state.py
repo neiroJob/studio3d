@@ -122,15 +122,28 @@ def view_state(printer, state=None):
         status = base.FINISHED
     state["status"] = status
     state["stock_warning"] = ""
-    if printer.pk is not None and status in (base.PRINTING, base.PAUSED):
+    if printer.pk is not None:
         from core.stock_models import PrinterStockSetup, PrintStockRun
 
-        if not PrinterStockSetup.objects.filter(printer=printer, spool__isnull=False).exists():
+        active_print = status in (base.PRINTING, base.PAUSED)
+        if (
+            active_print
+            and not PrinterStockSetup.objects.filter(printer=printer, spool__isnull=False).exists()
+        ):
             state["stock_warning"] = "Автосписание не настроено: выберите катушку в «Катушка и выпуск»."
-        else:
+        elif active_print:
             run = PrintStockRun.objects.filter(printer=printer, state="active").first()
             if run and run.issue:
                 state["stock_warning"] = run.issue
+        if not state["stock_warning"]:
+            state["stock_warning"] = (
+                PrintStockRun.objects.filter(printer=printer, state="pending")
+                .exclude(issue="")
+                .order_by("-started_at")
+                .values_list("issue", flat=True)
+                .first()
+                or ""
+            )
     state["label"] = base.STATUS_LABELS.get(status, status)
     state["color"] = STATUS_COLORS.get(status, "--st-off")
     state["age"] = time.time() - float(state.get("updated") or 0)

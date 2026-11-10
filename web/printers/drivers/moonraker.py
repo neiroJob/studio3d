@@ -614,8 +614,11 @@ class MoonrakerMonitor(base.BaseMonitor):
     async def run(self, on_state, on_job, history_since=0.0):
         import aiohttp
 
-        for item in await self.history_since(history_since):
-            await on_job(job_from_history(item, self.clock_offset), live=False)
+        backlog = await self.history_since(history_since)
+        for index, item in enumerate(backlog):
+            job = job_from_history(item, self.clock_offset)
+            job["latest_backfill"] = index == len(backlog) - 1
+            await on_job(job, live=False)
 
         ws_url = f"ws://{self.host}:{self.port}/websocket"
         async with self.session.ws_connect(ws_url, headers=self._headers(), heartbeat=20) as ws:

@@ -11,6 +11,7 @@ from core.stock import correct, finish, observe, post_document, receive_output, 
 from core.stock_models import PrinterStockSetup, PrintStockRun, Spool, StockDocument, StockMovement
 from printers.collector import _save_job
 from printers.models import Printer, PrintJob
+from printers.state import view_state
 from tests.test_crm import make_order
 from tests.test_stock import login, make_user
 
@@ -126,6 +127,13 @@ def test_failed_print_does_not_receive_defective_product(setup):
     receive_output(job, None)
     setup.output_item.refresh_from_db()
     assert setup.output_item.quantity == 0
+
+
+def test_uncertain_ending_leaves_stock_for_review_even_when_printer_ready(setup):
+    observe(setup.printer_id, state(60, extruded=10))
+    run = finish(end_job(setup, "interrupted", 60), timing_uncertain=True)
+    assert run.state == "pending" and not StockMovement.objects.exists()
+    assert view_state(setup.printer, {"status": "ready"})["stock_warning"] == run.issue
 
 
 def test_legacy_stock_is_not_received_twice_and_kg_is_normalized(setup):

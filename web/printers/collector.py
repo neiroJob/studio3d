@@ -55,7 +55,10 @@ def _save_job(printer_id, job, live):
     if len(external_id) > PrintJob._meta.get_field("external_id").max_length:
         external_id = hashlib.sha256(external_id.encode("utf-8")).hexdigest()
     existing = PrintJob.objects.filter(printer=printer, external_id=external_id).first()
-    if existing and existing.status == PrintJob.Status.COMPLETED and status != PrintJob.Status.COMPLETED:
+    if existing and (
+        (existing.status == PrintJob.Status.COMPLETED and status != PrintJob.Status.COMPLETED)
+        or job.get("estimated_terminal")
+    ):
         # Запоздавшая резервная оценка не должна понизить подтверждённое завершение.
         return False
     saved, created = PrintJob.objects.update_or_create(
@@ -77,8 +80,10 @@ def _save_job(printer_id, job, live):
     )
     from core.stock import finish
 
-    finish(saved)
-    if live and status == PrintJob.Status.COMPLETED and not saved.quality:
+    finish(saved, timing_uncertain=bool(job.get("estimated_terminal")))
+    if live and status == PrintJob.Status.COMPLETED and not saved.quality and not printer.jobs.filter(
+        ended_at__gt=saved.ended_at
+    ).exists():
         from core.stock_models import PrintStockRun
 
         if not PrintStockRun.objects.filter(job=saved, removed_at__isnull=False).exists():
@@ -121,17 +126,12 @@ def restore_awaiting(printer_id, filename):
                 Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
 
 
-#  Модели без истории заданий на самом принтере (см. drivers/creality_native.py) — если соединение
-# обрывается прямо во время печати, монитор пересоздаётся с нуля и теряет отслеживание задания
-# в памяти. Иначе такое задание не попадёт ни в историю, ни в «ждёт снятия» никогда.
-NO_SERVER_HISTORY_DRIVERS = {"creality_native"}
-
-
 class PrinterWorker:
     def __init__(self, printer, session):
         self.printer = printer
         self.session = session
         self.signature = self.make_signature(printer)
+        self.has_job_history = monitor_class(printer.profile).has_job_history if printer.profile else True
         self.connected = False
         self.last_state = base.offline_state()
         self.pending_on = 0.0
@@ -158,7 +158,6 @@ class PrinterWorker:
         self.connected = True
         from core.stock import observe
 
-        await sync_to_async(observe)(self.printer.pk, state)
         if state["status"] == base.PRINTING and self.last_state.get("status") not in (
             base.PRINTING,
             base.PAUSED,
@@ -168,51 +167,47 @@ class PrinterWorker:
             await restore_awaiting(self.printer.pk, state["completed_filename"])
         previous_job = self.last_state.get("job") or {}
         if (
-            self.printer.profile_id == "creality_k1"
+            not self.has_job_history
             and self.last_state.get("status") in (base.PRINTING, base.PAUSED)
             and state.get("status") == base.READY
             and previous_job.get("filename")
         ):
-            # K1 иногда пропускает кадр завершения. Монитор обычно сохраняет
-            # задание первым; повторный upsert страхует переход состояния.
-            elapsed = float(previous_job.get("elapsed") or 0)
-            progress = float(previous_job.get("progress") or 0)
-            started = (self.last_state.get("updated") or time.time()) - elapsed
-            await self.on_job(
-                {
-                    "external_id": previous_job.get("external_id")
-                    or f"{previous_job['filename']}@{round(started)}",
-                    "filename": previous_job["filename"],
-                    "status": "completed" if progress >= 0.999 else "cancelled",
-                    "start_time": started,
-                    "end_time": time.time(),
-                    "print_duration": elapsed,
-                    "total_duration": elapsed,
-                    "filament_mm": previous_job.get("filament_mm") or 0.0,
-                    "filament_g": previous_job.get("filament_g_total"),
-                },
-                live=True,
-            )
-        if self.pending_job_check is not None:
+            await self._finish_untracked_job(self.last_state)
+        if self.pending_job_check is not None and state["status"] not in (base.OFFLINE, base.SELF_TEST):
             pending = self.pending_job_check
-            self.pending_job_check = None
             pending_job = pending.get("job") or {}
             current_job = state.get("job") or {}
-            if current_job.get("filename") != pending_job.get("filename"):
-                await self._finish_job_after_gap(pending)
+            pending_id, current_id = pending_job.get("external_id"), current_job.get("external_id")
+            same_job = current_job.get("filename") == pending_job.get("filename") and (
+                not pending_id or not current_id or pending_id == current_id
+            )
+            if not self.has_job_history and not same_job:
+                await self._finish_untracked_job(
+                    pending,
+                    after_gap=True,
+                    fault=state["status"] == base.ERROR,
+                    live=state["status"] not in (base.PRINTING, base.PAUSED),
+                )
+            self.pending_job_check = None
+        await sync_to_async(observe)(self.printer.pk, state)
         self.last_state = state
         await sync_to_async(write_state)(self.printer.pk, state)
 
     async def on_job(self, job, live):
+        if not live and job.get("latest_backfill") and self.pending_job_check:
+            snapshot = self.pending_job_check
+            observed_at = snapshot.get("updated") or 0
+            live = (
+                job["filename"] == (snapshot.get("job") or {}).get("filename")
+                and bool(job["start_time"])
+                and job["start_time"] <= observed_at <= job["end_time"]
+            )
         created = await save_job(self.printer.pk, job, live)
         if created:
             log.info("%s: задание %s — %s", self.printer.name, job["filename"], job["status"])
 
-    async def _finish_job_after_gap(self, snapshot):
-        """Соединение обрывалось во время печати, а при восстановлении задания уже нет: у этой
-        модели нет истории на самом принтере (NO_SERVER_HISTORY_DRIVERS), поэтому факт завершения
-        иначе был бы потерян навсегда. Закрываем задание по последним показаниям перед обрывом —
-        точный момент окончания неизвестен, только то, что оно было активно и перестало быть."""
+    async def _finish_untracked_job(self, snapshot, *, after_gap=False, fault=False, live=True):
+        """Резервная запись для протокола без истории, по последнему видимому кадру."""
         job = snapshot.get("job") or {}
         if not job.get("filename"):
             return
@@ -221,17 +216,18 @@ class PrinterWorker:
         start_time = (snapshot.get("updated") or time.time()) - elapsed
         await self.on_job(
             {
-                "external_id": f"gap:{job['filename']}@{round(start_time)}",
+                "external_id": job.get("external_id") or f"{job['filename']}@{round(start_time)}",
                 "filename": job["filename"],
-                "status": "completed" if progress >= 0.999 else "interrupted",
+                "status": "completed" if progress >= 1 and not fault else "interrupted",
+                "estimated_terminal": True,
                 "start_time": start_time,
                 "end_time": time.time(),
                 "print_duration": elapsed,
                 "total_duration": elapsed,
                 "filament_mm": job.get("filament_mm") or 0.0,
-                "filament_g": None,
+                "filament_g": None if after_gap else job.get("filament_g_total"),
             },
-            live=True,
+            live=live,
         )
 
     async def heartbeat(self):
@@ -259,17 +255,21 @@ class PrinterWorker:
                 monitor = monitor_class(profile)(
                     self.printer.host, self.printer.port, self.printer.api_key, profile, session=self.session
                 )
-                since = await last_job_end(self.printer.pk, self.printer.history_since)
+                last_end = await last_job_end(self.printer.pk, self.printer.history_since)
+                # Read a small overlap in case multiple results arrived out of order.
+                since = max(self.printer.history_since, last_end - 60)
                 try:
                     await monitor.run(self.on_state, self.on_job, history_since=since)
+                    raise ConnectionError("Соединение с принтером завершилось")
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:  # noqa: BLE001 — любая ошибка связи ведёт к переподключению
+                    if self.connected:
+                        delay = 5
                     log.info("%s: нет связи (%s), повтор через %s с", self.printer.name, e, delay)
                     self.connected = False
                     if (
-                        profile.driver in NO_SERVER_HISTORY_DRIVERS
-                        and self.last_state.get("job")
+                        self.last_state.get("job")
                         and self.last_state.get("status") in (base.PRINTING, base.PAUSED)
                     ):
                         self.pending_job_check = self.last_state
@@ -278,7 +278,6 @@ class PrinterWorker:
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, 60)
                     continue
-                delay = 5
         finally:
             beat.cancel()
             if self.pending_on:

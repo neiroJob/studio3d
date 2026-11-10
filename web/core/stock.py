@@ -216,7 +216,7 @@ def observe(printer_id, state):
 
 
 @transaction.atomic
-def finish(job):
+def finish(job, *, timing_uncertain=False):
     """Связываем только наблюдавшуюся печать, а не старую историю принтера."""
     run = PrintStockRun.objects.select_for_update().filter(job=job).first()
     if not run:
@@ -238,7 +238,7 @@ def finish(job):
             run.issue = "Учёт подключён посреди печати: время до подключения не подтверждено."
     if run.corrected or (run.state == "settled" and run.settled_status == job.status):
         return
-    if run.last_elapsed is not None and job.print_duration - run.last_elapsed > 60:
+    if timing_uncertain or (run.last_elapsed is not None and job.print_duration - run.last_elapsed > 60):
         run.timing_complete = False
     run.job = job
     run.state = "pending"
