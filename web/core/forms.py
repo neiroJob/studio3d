@@ -74,6 +74,16 @@ class StockGroupForm(forms.ModelForm):
 
 
 class StockItemForm(forms.ModelForm):
+    unit = forms.ChoiceField(
+        label="Единица",
+        choices=[("шт", "Штуки (шт)"), ("г", "Граммы (г)"), ("кг", "Килограммы (кг)")],
+        initial="шт",
+        help_text=(
+            "Для пластика выберите граммы, для сопел и термоносков — штуки. "
+            "При смене единицы пересчитайте остаток, минимум и количество за закупочную цену."
+        ),
+    )
+
     class Meta:
         model = StockItem
         fields = [
@@ -95,6 +105,11 @@ class StockItemForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["group"].queryset = StockGroup.objects.all()
         self.fields["group"].empty_label = None
+        if self.instance.pk and self.instance.unit not in dict(self.fields["unit"].choices):
+            self.fields["unit"].choices = [
+                *self.fields["unit"].choices,
+                (self.instance.unit, f"{self.instance.unit} (прежняя единица)"),
+            ]
         self.fields["purchase_price"].required = False
         self.fields["purchase_quantity"].required = False
         if self.instance.pk and self.instance.spools.exists():

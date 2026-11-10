@@ -117,7 +117,7 @@
 {% elif tab == "history" %}
 <div class="panel tbl-wrap"><table>
   <tr><th>Начало</th><th>Конец</th><th>Файл</th><th class="num">Время печати</th><th class="num">Пластик</th><th>Результат</th></tr>
-  {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|basename }}</td><td class="num">{{ j.print_duration|duration }}</td>
+  {% for j in jobs %}<tr><td>{{ j.started_at|date:"d.m.Y H:i" }}{% if j.clock_offset_seconds %}<div class="hint" title="Даты оценены по смещению часов принтера при получении истории. Длительность взята из счётчика принтера.">Поправка часов принтера</div>{% endif %}</td><td>{{ j.ended_at|date:"d.m.Y H:i"|default:"—" }}</td><td>{{ j.filename|basename }}</td><td class="num">{{ j.print_duration|duration }}</td>
     <td class="num">{% if j.filament_g %}{{ j.filament_g|floatformat:0 }} г{% else %}{{ j.filament_mm|floatformat:0 }} мм{% endif %}</td>
     <td><span class="pill c" style="--c:var({% if j.status == 'completed' %}--st-print{% elif j.status == 'cancelled' %}--st-off{% else %}--st-err{% endif %})">{{ j.get_status_display }}</span>
       {% if j.quality == "defect" %}<span class="pill c" style="--c:var(--st-err)" title="{{ j.defect_note }}">Брак{% if j.get_defect_reason_display %}: {{ j.get_defect_reason_display }}{% endif %}</span>{% if j.defect_note %}<div class="small muted">{{ j.defect_note|linebreaksbr }}</div>{% endif %}{% endif %}</td></tr>

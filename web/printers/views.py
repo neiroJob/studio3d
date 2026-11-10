@@ -62,8 +62,7 @@ def dashboard_context(request):
         items = [
             it
             for it in items
-            if it["state"]["status"] == current
-            or (current == base.ERROR and it["state"].get("faults"))
+            if it["state"]["status"] == current or (current == base.ERROR and it["state"].get("faults"))
         ]
     strip = [
         {"key": k, "label": label, "color": color, "count": counts.get(k, 0)} for k, label, color in FILTERS
@@ -74,6 +73,10 @@ def dashboard_context(request):
         if it["state"]["status"] in (base.ERROR, base.FINISHED, base.PAUSED)
         or it["state"]["heating_idle"]
         or it["state"].get("faults")
+        or it["state"].get("stock_warning")
+        or it["state"].get("clock_warning")
+        or it["state"].get("filament_warning")
+        or it["state"].get("awaiting_removal")
         # Печать идёт, но принтер сам сообщил предупреждение (например, датчик нити) —
         # статус при этом не меняется (unverified-сигнал, печать не останавливаем сами).
         or (it["state"]["status"] == base.PRINTING and it["state"].get("message"))
@@ -355,7 +358,7 @@ def plate_cleared(request, pk):
 
 def _state_blocks_start(printer):
     state = view_state(printer, read_state(printer.pk))
-    if state["status"] == base.FINISHED:
+    if state.get("awaiting_removal"):
         return "Сначала отметьте, что изделие снято со стола."
     if state["status"] in (base.PRINTING, base.PAUSED):
         return "Принтер занят: идёт печать."

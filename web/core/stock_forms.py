@@ -33,7 +33,10 @@ class SpoolForm(forms.ModelForm):
         item = data.get("item")
         if item and not item.grams_per_unit:
             self.add_error(
-                "item", "Сначала укажите единицу позиции г или кг и достоверный вес старого остатка."
+                "item",
+                "Откройте Склад → Остатки → Изменить у этого материала. "
+                "Выберите единицу «Граммы (г)» и пересчитайте остаток в граммы. "
+                "Затем вернитесь к приходу катушки.",
             )
         if data.get("remaining_g") is not None and data.get("nominal_g") is not None:
             if data["remaining_g"] > data["nominal_g"]:

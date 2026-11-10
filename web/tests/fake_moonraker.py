@@ -25,6 +25,7 @@ class FakeMoonraker:
         self.uploads = []
         self.gcode_files = {}
         self.missing_files = set()  # имена файлов, для которых metadata() отвечает «не найден»
+        self.http_date = None
         self.command_override = (
             None  # подмена ответа на /printer/print/cancel  # путь → bytes, для /server/files/gcodes/<путь>
         )
@@ -37,7 +38,9 @@ class FakeMoonraker:
     # --- HTTP ---
 
     def _ok(self, result):
-        return web.json_response({"result": result})
+        return web.json_response(
+            {"result": result}, headers={"Date": self.http_date} if self.http_date else None
+        )
 
     async def server_info(self, request):
         return self._ok(self.data["server_info"])
@@ -56,8 +59,10 @@ class FakeMoonraker:
 
     async def history_list(self, request):
         since = float(request.query.get("since", 0))
-        jobs = [j for j in self.data["history"] if (j.get("end_time") or 0) > since]
-        return self._ok({"count": len(jobs), "jobs": jobs})
+        jobs = [j for j in self.data["history"] if (j.get("start_time") or 0) > since]
+        jobs.sort(key=lambda j: j.get("job_id", ""), reverse=request.query.get("order", "desc") == "desc")
+        start, limit = int(request.query.get("start", 0)), int(request.query.get("limit", 50))
+        return self._ok({"count": len(jobs), "jobs": jobs[start : start + limit]})
 
     async def files_list(self, request):
         return self._ok(self.data["files"])

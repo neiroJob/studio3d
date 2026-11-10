@@ -113,6 +113,7 @@ class PrintJob(models.Model):
     ended_at = models.DateTimeField("Окончание", null=True, blank=True)
     print_duration = models.FloatField("Время печати, с", default=0)
     total_duration = models.FloatField("Общее время, с", default=0)
+    clock_offset_seconds = models.FloatField("Поправка часов принтера, с", default=0)
     filament_mm = models.FloatField("Пластик, мм", default=0)
     filament_g = models.FloatField("Пластик, г", null=True, blank=True)
 

@@ -13,6 +13,7 @@ import math
 import re
 import time
 import urllib.parse
+from email.utils import parsedate_to_datetime
 
 import requests
 
@@ -168,9 +169,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
     if width_sensor:
         diameter = sensor.get("Diameter")
         valid = (
-            isinstance(diameter, (int, float))
-            and not isinstance(diameter, bool)
-            and math.isfinite(diameter)
+            isinstance(diameter, (int, float)) and not isinstance(diameter, bool) and math.isfinite(diameter)
         )
         filament = {
             "present": diameter > profile.filament_runout_diameter if valid else None,
@@ -194,7 +193,7 @@ def normalize(status, meta=None, profile=None, connected=True, now=None):
     }
 
 
-def job_from_history(item):
+def job_from_history(item, clock_offset=0.0):
     """Запись server/history → поля PrintJob."""
     meta = item.get("metadata") or {}
     filament_mm = float(item.get("filament_used") or 0)
@@ -210,8 +209,9 @@ def job_from_history(item):
         "external_id": str(item.get("job_id")),
         "filename": item.get("filename") or "",
         "status": item.get("status") or "other",
-        "start_time": float(item.get("start_time") or 0),
-        "end_time": float(item["end_time"]) if item.get("end_time") else None,
+        "start_time": float(item["start_time"]) + clock_offset if item.get("start_time") else 0,
+        "end_time": float(item["end_time"]) + clock_offset if item.get("end_time") else None,
+        "clock_offset_seconds": clock_offset,
         "print_duration": float(item.get("print_duration") or 0),
         "total_duration": float(item.get("total_duration") or 0),
         "filament_mm": filament_mm,
@@ -550,6 +550,7 @@ class MoonrakerMonitor(base.BaseMonitor):
         self.console = collections.deque(maxlen=20)
         self.faults = []
         self._catchup_tasks = set()
+        self.clock_offset = 0.0
 
     @property
     def http(self):
@@ -563,6 +564,12 @@ class MoonrakerMonitor(base.BaseMonitor):
             self.http + path, params=params, headers=self._headers(), timeout=10
         ) as r:
             data = await r.json(content_type=None)
+            # HTTP Date uses the printer wall clock; eventtime is only uptime.
+            try:
+                offset = time.time() - parsedate_to_datetime(r.headers.get("Date", "")).timestamp()
+                self.clock_offset = round(offset) if abs(offset) > 300 else 0.0
+            except (ValueError, TypeError, OverflowError):
+                pass
             if "error" in data:
                 raise base.DriverError(str(data["error"]))
             return data.get("result")
@@ -571,12 +578,16 @@ class MoonrakerMonitor(base.BaseMonitor):
         """Задания, завершённые после since (unix time), по порядку."""
         jobs, start = [], 0
         while True:
-            params = {"since": f"{since:.3f}", "order": "asc", "limit": "50", "start": str(start)}
+            # Moonraker since filters START time, so it misses long jobs ending now.
+            params = {"order": "desc", "limit": "50", "start": str(start)}
             result = await self._get("/server/history/list", params) or {}
             page = result.get("jobs") or []
-            jobs.extend(j for j in page if j.get("end_time") and j.get("status") != "in_progress")
-            if len(page) < 50:
-                return jobs
+            ended = [j for j in page if j.get("end_time") and j.get("status") != "in_progress"]
+            jobs.extend(j for j in ended if float(j["end_time"]) + self.clock_offset > since)
+            if len(page) < 50 or (
+                ended and all(float(j["end_time"]) + self.clock_offset <= since for j in ended)
+            ):
+                return sorted(jobs, key=lambda j: float(j["end_time"]))
             start += 50
 
     async def _call(self, ws, method, params=None):
@@ -604,16 +615,18 @@ class MoonrakerMonitor(base.BaseMonitor):
         import aiohttp
 
         for item in await self.history_since(history_since):
-            await on_job(job_from_history(item), live=False)
+            await on_job(job_from_history(item, self.clock_offset), live=False)
 
         ws_url = f"ws://{self.host}:{self.port}/websocket"
         async with self.session.ws_connect(ws_url, headers=self._headers(), heartbeat=20) as ws:
             reader = asyncio.create_task(self._reader(ws, on_state, on_job))
+            history_poll = asyncio.create_task(self._poll_history(on_job))
             try:
                 await self._subscribe(ws, on_state)
                 await reader
             finally:
                 reader.cancel()
+                history_poll.cancel()
                 for fut in self._pending.values():
                     fut.cancel()
                 self._pending.clear()
@@ -639,6 +652,14 @@ class MoonrakerMonitor(base.BaseMonitor):
 
     async def _emit_state(self, on_state):
         state = decorate(normalize(self.status, self.meta, self.profile), self.console, self.faults)
+        state["clock_warning"] = (
+            "Часы принтера расходятся с сервером. Даты истории оценены по текущему смещению часов. "
+            "Проверьте дату и синхронизацию времени на принтере."
+            if self.clock_offset
+            else ""
+        )
+        stats = self.status.get("print_stats") or {}
+        state["completed_filename"] = stats.get("filename") if stats.get("state") == "complete" else None
         for fault in state.get("faults") or []:
             if fault not in self.faults:
                 self.faults.append(fault)
@@ -690,7 +711,7 @@ class MoonrakerMonitor(base.BaseMonitor):
             elif method == "notify_history_changed" and params:
                 event = params[0]
                 if event.get("action") == "finished" and event.get("job"):
-                    await on_job(job_from_history(event["job"]), live=True)
+                    await on_job(job_from_history(event["job"], self.clock_offset), live=True)
 
     def _job_active(self):
         return (self.status.get("print_stats") or {}).get("state") in ("printing", "paused")
@@ -699,6 +720,20 @@ class MoonrakerMonitor(base.BaseMonitor):
         task = asyncio.create_task(self._catch_up_history(on_job))
         self._catchup_tasks.add(task)
         task.add_done_callback(self._catchup_tasks.discard)
+
+    async def _poll_history(self, on_job):
+        # Recover lost notifications and delayed history writes.
+        since = time.time() - 60
+        while True:
+            await asyncio.sleep(30)
+            try:
+                jobs = await self.history_since(since)
+                for job in jobs:
+                    await on_job(job_from_history(job, self.clock_offset), live=True)
+                if jobs:
+                    since = max(float(j["end_time"]) + self.clock_offset for j in jobs) - 1
+            except Exception:  # noqa: BLE001 -- retry without losing the cursor
+                continue
 
     async def _catch_up_history(self, on_job):
         """`notify_history_changed` не гарантирован на всех сборках Moonraker (встречалось на
@@ -713,5 +748,5 @@ class MoonrakerMonitor(base.BaseMonitor):
                 continue
             if jobs:
                 for job in jobs:
-                    await on_job(job_from_history(job), live=True)
+                    await on_job(job_from_history(job, self.clock_offset), live=True)
                 return

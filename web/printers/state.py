@@ -112,6 +112,12 @@ def view_state(printer, state=None):
         filament = {"present": None, "enabled": None}
     state["filament"] = filament
     status = state.get("status", base.OFFLINE)
+    state["awaiting_removal"] = printer.awaiting_removal and status not in (base.PRINTING, base.PAUSED)
+    state["filament_warning"] = (
+        "Реакция на отсутствие нити отключена в прошивке. Наличие нити и защита от обрыва — разные показания."
+        if filament.get("enabled") is False and status == base.PRINTING
+        else ""
+    )
     if status == base.READY and printer.awaiting_removal:
         status = base.FINISHED
     state["status"] = status

@@ -64,8 +64,11 @@ def _save_job(printer_id, job, live):
         defaults={
             "filename": job["filename"],
             "status": status,
-            "started_at": _ts(job["start_time"]) or timezone.now(),
-            "ended_at": _ts(job["end_time"]),
+            "started_at": existing.started_at if existing else _ts(job["start_time"]) or timezone.now(),
+            "ended_at": existing.ended_at if existing else _ts(job["end_time"]),
+            "clock_offset_seconds": existing.clock_offset_seconds
+            if existing
+            else job.get("clock_offset_seconds", 0),
             "print_duration": job["print_duration"],
             "total_duration": job["total_duration"],
             "filament_mm": job["filament_mm"],
@@ -75,7 +78,7 @@ def _save_job(printer_id, job, live):
     from core.stock import finish
 
     finish(saved)
-    if live and status == PrintJob.Status.COMPLETED:
+    if live and status == PrintJob.Status.COMPLETED and not saved.quality:
         from core.stock_models import PrintStockRun
 
         if not PrintStockRun.objects.filter(job=saved, removed_at__isnull=False).exists():
@@ -102,6 +105,20 @@ def add_on_seconds(printer_id, seconds):
 def clear_awaiting(printer_id):
     close_old_connections()
     Printer.objects.filter(pk=printer_id, awaiting_removal=True).update(awaiting_removal=False)
+
+
+@sync_to_async
+def restore_awaiting(printer_id, filename):
+    """Restore the latest unassessed completed job after reconnect, never an older print."""
+    close_old_connections()
+    with transaction.atomic():
+        printer = Printer.objects.select_for_update().get(pk=printer_id)
+        job = printer.jobs.order_by("-ended_at").first()
+        if job and job.status == PrintJob.Status.COMPLETED and job.filename == filename and not job.quality:
+            from core.stock_models import PrintStockRun
+
+            if not PrintStockRun.objects.filter(job=job, removed_at__isnull=False).exists():
+                Printer.objects.filter(pk=printer_id).update(awaiting_removal=True)
 
 
 #  Модели без истории заданий на самом принтере (см. drivers/creality_native.py) — если соединение
@@ -142,8 +159,13 @@ class PrinterWorker:
         from core.stock import observe
 
         await sync_to_async(observe)(self.printer.pk, state)
-        if state["status"] == base.PRINTING:
+        if state["status"] == base.PRINTING and self.last_state.get("status") not in (
+            base.PRINTING,
+            base.PAUSED,
+        ):
             await clear_awaiting(self.printer.pk)
+        elif state.get("completed_filename") and state["status"] not in (base.PRINTING, base.PAUSED):
+            await restore_awaiting(self.printer.pk, state["completed_filename"])
         previous_job = self.last_state.get("job") or {}
         if (
             self.printer.profile_id == "creality_k1"

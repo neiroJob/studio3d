@@ -193,12 +193,46 @@ is in [README.ru.md](README.ru.md) (Russian).
 
 ## Print removal and maintenance
 
+Moonraker history is recovered on connection, through notifications and every 30 seconds.
+Studio3D filters by completion time so long prints are not excluded by Moonraker's
+start-time filter. If the printer clock differs by more than five minutes, timestamps
+are estimated using its HTTP Date offset and marked in the existing history table.
+Reported print duration remains unchanged. Verify recovered dates if the printer clock
+changed between jobs, and configure time synchronization while the printer is idle.
+
+A subsequent fault does not hide removal of an already completed print. Warehouse,
+clock and disabled filament-reaction warnings appear under “Needs attention”. Filament
+presence and firmware protection activity are separate readings; Studio3D does not
+automatically enable protection during a print.
+
+Moonraker history is recovered on connection, through notifications and every 30 seconds.
+Studio3D filters by completion time so long prints are not excluded by Moonraker's
+start-time filter. If the printer clock differs by more than five minutes, timestamps
+are estimated using its HTTP Date offset and marked in the existing history table.
+Reported print duration remains unchanged. Verify recovered dates if the printer clock
+changed between jobs, and configure time synchronization while the printer is idle.
+
+A subsequent fault does not hide removal of an already completed print. Warehouse,
+clock and disabled filament-reaction warnings appear under “Needs attention”. Filament
+presence and firmware protection activity are separate readings; Studio3D does not
+automatically enable protection during a print.
+
 - Record print quality in the existing part removal dialog. A defect requires a reason, and the “Other” and “Printer fault” reasons also require a comment.
 - Open the printer's Maintenance page to log one or more completed jobs. Select the exact stock items and quantities used. The log stores the printer's current print-hour reading, and stock documents are posted in the same transaction.
 - Administrators can edit the maintenance catalog and optionally restrict each stock-consuming job to a stock group.
 - On the Files tab, choose the installed spool before starting a file or uploading with immediate start. Different jobs can use different materials under the existing one-spool-per-printer accounting model.
 
 ## Automatic warehouse
+
+Stock units use a dropdown with pieces, grams and kilograms. Use grams for filament
+and pieces for nozzles or silicone socks. Existing custom units remain available when
+editing an old item. Changing a unit does not convert existing balances, reorder levels
+or the quantity covered by a purchase price; reconcile those values first.
+
+Stock units use a dropdown with pieces, grams and kilograms. Use grams for filament
+and pieces for nozzles or silicone socks. Existing custom units remain available when
+editing an old item. Changing a unit does not convert existing balances, reorder levels
+or the quantity covered by a purchase price; reconcile those values first.
 
 The existing Stock page now includes balances/reservations, individual filament spools,
 posted movements and drafts, print accounting, replenishment and existing groups/archive.

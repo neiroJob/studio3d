@@ -1,11 +1,13 @@
 {% load printers_tags %}{% with s=state p=printer %}
 {% if s.stock_warning %}<div class="msg error">Склад: {{ s.stock_warning }}{% if can_control %} <a href="{% url 'stock_setup' p.pk %}">Катушка и выпуск</a>{% endif %}</div>{% endif %}
+{% if s.clock_warning %}<div class="msg error">{{ s.clock_warning }}</div>{% endif %}
+{% if s.filament_warning %}<div class="msg error">{{ s.filament_warning }}</div>{% endif %}
 <div class="panel" style="--c:var({{ s.color }})">
   <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Задание</h2><span class="spacer"></span><span class="status"><span class="dot"></span>{{ s.label }}</span></div>
   {% if s.faults %}<div class="msg error" style="margin-bottom:10px"><b>Неисправности</b>{% for fault in s.faults %}<div>{{ fault }}</div>{% endfor %}
     {% if can_control %}<form method="post" action="{% url 'printer_faults_acknowledge' p.pk %}" style="margin-top:8px">{% csrf_token %}<button class="btn sm warn">Я увидел и принял меры</button></form>{% endif %}
   </div>{% elif s.message %}<div class="msg{% if s.status == 'error' %} error{% endif %}" style="margin-bottom:10px">{{ s.message }}</div>{% endif %}
-  <dl class="kv"><dt>Пластик в тракте</dt><dd>{% if s.filament.present == True %}есть{% elif s.filament.present == False %}нет{% else %}нет данных от датчика{% endif %}{% if s.filament.enabled == False %} (датчик отключён){% endif %}</dd></dl>
+  <dl class="kv"><dt>Пластик в тракте</dt><dd>{% if s.filament.present == True %}есть{% elif s.filament.present == False %}нет{% else %}нет данных от датчика{% endif %}{% if s.filament.enabled == False %} (реакция на отсутствие нити отключена){% endif %}</dd></dl>
   {% if s.job and s.status == "error" %}
     <dl class="kv"><dt>Файл</dt><dd>{{ s.job.filename|basename }}</dd></dl>
   {% elif s.job %}
@@ -27,7 +29,7 @@
       {% if s.status == "printing" or s.status == "paused" %}<form class="inline" method="post" action="{% url 'printer_command' p.pk 'cancel' %}" data-busy="Отменяется…" onsubmit="return confirm('Отменить печать на {{ p.name|escapejs }}? Продолжить её будет нельзя.')">{% csrf_token %}<button class="btn warn">Отменить печать</button></form>{% endif %}
       {% if s.status == "ready" %}<a class="btn pri" href="?tab=files">Поставить на печать</a>{% endif %}
     {% endif %}
-    {% if s.status == "finished" and "print_plate" in rights %}<button type="button" class="btn pri" data-open-dialog="plate-dialog-{{ p.pk }}">Снял изделие</button>{% endif %}
+    {% if s.awaiting_removal and "print_plate" in rights %}<button type="button" class="btn pri" data-open-dialog="plate-dialog-{{ p.pk }}">Снял изделие</button>{% endif %}
   </div>
 </div>
 {% if s.heating_idle %}

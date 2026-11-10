@@ -9,9 +9,14 @@
   <div class="stack">
     <div class="panel"><h2>Требует внимания</h2>
       {% for it in attention %}
-        <div class="alert"><span class="dot" style="background:var({% if it.state.heating_idle and it.state.status == 'ready' %}--st-pause{% else %}{{ it.state.color }}{% endif %})"></span><div><b>{{ it.printer.name }}:</b>
+        <div class="alert"><span class="dot" style="background:var({% if it.state.faults or it.state.stock_warning or it.state.clock_warning or it.state.filament_warning %}--st-err{% elif it.state.heating_idle and it.state.status == 'ready' %}--st-pause{% else %}{{ it.state.color }}{% endif %})"></span><div><b>{{ it.printer.name }}:</b>
           {% if it.state.status == "error" %}{{ it.state.message|default:"ошибка" }}{% elif it.state.status == "finished" %}печать завершена, изделие ждёт снятия{% elif it.state.status == "paused" %}печать на паузе{% elif it.state.status == "printing" and it.state.message %}{{ it.state.message }}{% endif %}
           {% if it.state.heating_idle %}нагрев включён без печати: {{ it.state.heating_idle|join:", " }}.{% endif %}
+          {% for fault in it.state.faults %}{% if fault != it.state.message %}<div>{{ fault }}</div>{% endif %}{% endfor %}
+          {% if it.state.stock_warning %}<div>Склад: {{ it.state.stock_warning }}</div>{% endif %}
+          {% if it.state.clock_warning %}<div>{{ it.state.clock_warning }}</div>{% endif %}
+          {% if it.state.filament_warning %}<div>{{ it.state.filament_warning }}</div>{% endif %}
+          {% if it.state.awaiting_removal and it.state.status != 'finished' %}<div>Изделие ждёт снятия и оценки качества.</div>{% endif %}
           <a href="{% url 'printer_detail' it.printer.pk %}">Открыть</a></div></div>
       {% empty %}<p class="muted small" style="margin:0">Всё в порядке.</p>{% endfor %}
     </div>
